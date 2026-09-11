@@ -13,6 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useElasticity } from "@/lib/hooks";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ChartTooltip } from "@/components/dashboard/chart-tooltip";
 
 const ROUTE_COLORS = [
   "#3b82f6",
@@ -86,12 +87,7 @@ export default function ElasticityPage() {
                   tickFormatter={(v) => `₹${(v / 1000).toFixed(1)}k`}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "8px",
-                    fontSize: "11px",
-                  }}
+                  content={<ChartTooltip />}
                   formatter={(value) => [
                     `₹${Number(value).toLocaleString("en-IN")}`,
                     undefined,

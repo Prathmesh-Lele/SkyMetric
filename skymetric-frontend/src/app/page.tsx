@@ -8,6 +8,7 @@ import { SectorTable } from "@/components/dashboard/sector-table";
 import { FareBreakdown } from "@/components/dashboard/fare-breakdown";
 import { DayOfWeekHeatmap } from "@/components/dashboard/day-of-week-heatmap";
 import { ScraperStatusDashboard } from "@/components/dashboard/scraper-status";
+import { BacktestChart } from "@/components/dashboard/backtest-chart";
 import { useDailyIndex, useHealth } from "@/lib/hooks";
 
 function seededRandom(seed: number): number {
@@ -65,6 +66,8 @@ export default function DashboardPage() {
         sectors={dailyIndex?.sector_indices ?? {}}
         isLoading={indexLoading}
       />
+
+      <BacktestChart />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <FareBreakdown />

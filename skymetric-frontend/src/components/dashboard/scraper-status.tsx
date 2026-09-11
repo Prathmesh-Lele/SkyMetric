@@ -20,9 +20,12 @@ export function ScraperStatusDashboard() {
     setIsRunning(true);
     try {
       await api.scraperRun(origin, destination);
-      setTimeout(() => refetch(), 2000);
+      setTimeout(() => {
+        refetch();
+        setIsRunning(false);
+      }, 2000);
     } catch {
-      // API error handled by status polling
+      setIsRunning(false);
     }
   };
 

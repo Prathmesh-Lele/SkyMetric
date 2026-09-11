@@ -9,6 +9,7 @@ import {
   Legend,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartTooltip } from "@/components/dashboard/chart-tooltip";
 
 const FARE_DATA = [
   { name: "Base Fare", value: 4200, color: "var(--chart-1)" },
@@ -45,12 +46,7 @@ export function FareBreakdown() {
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "var(--card)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  fontSize: "11px",
-                }}
+                content={<ChartTooltip />}
                 formatter={(value) => [
                   `₹${Number(value).toLocaleString("en-IN")} (${((Number(value) / total) * 100).toFixed(1)}%)`,
                   undefined,

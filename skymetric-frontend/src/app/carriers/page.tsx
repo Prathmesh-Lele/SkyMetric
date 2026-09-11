@@ -13,6 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCarriers } from "@/lib/hooks";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ChartTooltip } from "@/components/dashboard/chart-tooltip";
 import {
   Table,
   TableBody,
@@ -103,12 +104,7 @@ export default function CarriersPage() {
                     width={120}
                   />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: "var(--card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "8px",
-                      fontSize: "11px",
-                    }}
+                    content={<ChartTooltip />}
                     formatter={(value) => [`${Number(value)}%`, "Market Share"]}
                   />
                   <Bar dataKey="share" radius={[0, 4, 4, 0]}>
@@ -155,12 +151,7 @@ export default function CarriersPage() {
                     tickFormatter={(v) => `₹${(v / 1000).toFixed(1)}k`}
                   />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: "var(--card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "8px",
-                      fontSize: "11px",
-                    }}
+                    content={<ChartTooltip />}
                     formatter={(value) => [
                       `₹${Number(value).toLocaleString("en-IN")}`,
                       "Avg Fare",

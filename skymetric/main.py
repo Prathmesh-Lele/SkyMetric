@@ -49,6 +49,8 @@ def cmd_seed(args):
             fare_class=r["fare_class"],
             base_fare=r["base_fare"],
             taxes_and_fees=r["taxes_and_fees"],
+            udf=r.get("udf"),
+            convenience_charge=r.get("convenience_charge"),
             total_fare=r["total_fare"],
             source_platform=r["source_platform"],
         )

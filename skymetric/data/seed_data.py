@@ -97,9 +97,11 @@ def generate_fares_for_day(
                 if include_outliers and random.random() < 0.02:
                     total *= random.choice([0.3, 3.5])
 
-                base_fare_final = round(total * 0.75, 2)
-                taxes = round(total * 0.15 + random.uniform(200, 600), 2)
-                total_final = round(base_fare_final + taxes, 2)
+                base_fare_final = round(total * 0.70, 2)
+                taxes = round(total * 0.12 + random.uniform(100, 400), 2)
+                udf = round(total * 0.08, 2)
+                convenience = round(total * 0.10, 2)
+                total_final = round(base_fare_final + taxes + udf + convenience, 2)
 
                 departure_hour = random.choice([5, 6, 7, 8, 9, 10, 11, 13, 14, 16, 18, 20, 22])
                 departure = target_date.replace(hour=departure_hour, minute=random.randint(0, 59))
@@ -115,6 +117,8 @@ def generate_fares_for_day(
                     "fare_class": "economy",
                     "base_fare": max(base_fare_final, 0),
                     "taxes_and_fees": max(taxes, 0),
+                    "udf": udf,
+                    "convenience_charge": convenience,
                     "total_fare": max(total_final, 0),
                     "source_platform": "seed_generator",
                 })
@@ -125,13 +129,14 @@ def generate_fares_for_day(
 def generate_30_day_seed(
     end_date: datetime | None = None,
     include_outliers: bool = True,
+    days: int = 30,
 ) -> List[dict]:
-    """Generate 30 days of historical fare data."""
+    """Generate N days of historical fare data."""
     if end_date is None:
         end_date = datetime.utcnow()
 
     all_records = []
-    for i in range(30):
+    for i in range(days):
         day = end_date - timedelta(days=i)
         day_records = generate_fares_for_day(day, include_outliers=include_outliers)
         all_records.extend(day_records)

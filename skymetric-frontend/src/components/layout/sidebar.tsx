@@ -10,6 +10,7 @@ import {
   Plane,
   FileCode,
   Activity,
+  BarChart3,
 } from "lucide-react";
 
 const navItems = [
@@ -17,6 +18,7 @@ const navItems = [
   { href: "/heatmap", label: "Route Heatmap", icon: Map },
   { href: "/elasticity", label: "Lead-Time Curves", icon: TrendingUp },
   { href: "/carriers", label: "Carriers", icon: Plane },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/api-explorer", label: "API Explorer", icon: FileCode },
 ];
 

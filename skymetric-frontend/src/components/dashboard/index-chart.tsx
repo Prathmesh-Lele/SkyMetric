@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ChartTooltip } from "@/components/dashboard/chart-tooltip";
 
 interface DataPoint {
   date: string;
@@ -65,12 +66,7 @@ export function IndexChart({
                 domain={["dataMin - 2", "dataMax + 2"]}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "var(--card)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  fontSize: "12px",
-                }}
+                content={<ChartTooltip />}
               />
               <ReferenceLine
                 y={100}

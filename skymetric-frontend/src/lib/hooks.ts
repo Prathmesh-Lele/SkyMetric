@@ -61,3 +61,43 @@ export function useScraperStatus() {
     },
   });
 }
+
+export function useBacktest() {
+  return useQuery({
+    queryKey: ["backtest"],
+    queryFn: () => api.backtest(),
+    staleTime: 300_000,
+  });
+}
+
+export function useCpi() {
+  return useQuery({
+    queryKey: ["cpi"],
+    queryFn: () => api.cpiAll(),
+    staleTime: 600_000,
+  });
+}
+
+export function useSuperlative(date?: string) {
+  return useQuery({
+    queryKey: ["superlative", date],
+    queryFn: () => api.superlative(date),
+    staleTime: 60_000,
+  });
+}
+
+export function useAnomalies(date?: string, threshold?: number) {
+  return useQuery({
+    queryKey: ["anomalies", date, threshold],
+    queryFn: () => api.anomalies(date, threshold),
+    staleTime: 60_000,
+  });
+}
+
+export function useDataTrust(date?: string) {
+  return useQuery({
+    queryKey: ["dataTrust", date],
+    queryFn: () => api.dataTrust(date),
+    staleTime: 60_000,
+  });
+}

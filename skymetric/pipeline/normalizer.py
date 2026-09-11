@@ -13,6 +13,10 @@ def normalize_record(record: Dict) -> Dict:
     if total <= 0 and base_fare > 0:
         total = base_fare + taxes
 
+    # Compute itemized breakdown when total is available
+    udf = round(max(total * 0.08, 0), 2) if total > 0 else 0.0
+    convenience = round(max(total * 0.10, 0), 2) if total > 0 else 0.0
+
     return {
         "timestamp": record.get("timestamp"),
         "origin": (record.get("origin") or "").upper()[:3],
@@ -24,6 +28,8 @@ def normalize_record(record: Dict) -> Dict:
         "fare_class": record.get("fare_class", "economy"),
         "base_fare": round(max(base_fare, 0), 2),
         "taxes_and_fees": round(max(taxes, 0), 2),
+        "udf": udf,
+        "convenience_charge": convenience,
         "total_fare": round(max(total, 0), 2),
         "source_platform": record.get("source_platform", "unknown"),
     }

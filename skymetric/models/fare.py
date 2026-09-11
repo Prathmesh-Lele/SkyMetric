@@ -17,6 +17,8 @@ class Fare(Base):
     fare_class = Column(String(20), nullable=False, default="economy")
     base_fare = Column(Float, nullable=False)
     taxes_and_fees = Column(Float, nullable=False, default=0.0)
+    udf = Column(Float, nullable=True)
+    convenience_charge = Column(Float, nullable=True)
     total_fare = Column(Float, nullable=False)
     source_platform = Column(String(30), nullable=False)
 
