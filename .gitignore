@@ -1,0 +1,28 @@
+﻿# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Database
+skymetric.db
+
+# Environment files
+.env
+.env.local
+.env.*
+!.env.example
+
+# Node
+node_modules/
+
+# Next.js
+.next/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
