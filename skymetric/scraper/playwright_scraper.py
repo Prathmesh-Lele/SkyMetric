@@ -234,13 +234,12 @@ class PlaywrightScraper(BaseScraper):
             await page.wait_for_timeout(3000)
 
             fares = []
-            flight_cards = await page.query_selector_all('[data-testid="flight-card"], .flight-card, .result-card')
+            flight_cards = await page.query_selector_all('.flight-listing-wrap, .flight-list-item, .flight-card')
 
             for card in flight_cards[:10]:
                 try:
-                    fare_text = await card.inner_text()
-                    fare_el = await card.query_selector('.fare, .price, [data-testid="fare"]')
-                    carrier_el = await card.query_selector('.airline-name, .carrier')
+                    fare_el = await card.query_selector('.flight-price, .price-wrap, [data-testid="fare"]')
+                    carrier_el = await card.query_selector('.airline-name, .carrier-logo + span')
 
                     fare = 0
                     if fare_el:

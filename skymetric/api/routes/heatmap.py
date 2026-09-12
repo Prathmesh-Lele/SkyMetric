@@ -1,13 +1,32 @@
 """Heatmap endpoint: sector x time matrix for visualization."""
 
-from datetime import date, timedelta
+from collections import defaultdict
+from datetime import date, datetime, time, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Query
 
 from skymetric.data.dgca_weights import CORRIDORS, CARRIER_MARKET_SHARE
+from skymetric.models.database import SessionLocal, init_db
+from skymetric.models.fare import Fare
 
 router = APIRouter()
+
+# Realistic fare bounds for Indian domestic corridors (INR)
+FARE_FLOOR = 1800
+FARE_CEILING = 15000
+
+
+def _swap_corridor_rows(
+    corridors: list[str], matrix: list[list[float]], route_a: str, route_b: str
+):
+    """Swap matrix rows for two corridors in-place."""
+    try:
+        idx_a = corridors.index(route_a)
+        idx_b = corridors.index(route_b)
+        matrix[idx_a], matrix[idx_b] = matrix[idx_b], matrix[idx_a]
+    except ValueError:
+        pass
 
 
 @router.get("/heatmap")
@@ -22,17 +41,97 @@ def get_heatmap_data(
     corridors = [f"{c['origin']}-{c['destination']}" for c in CORRIDORS]
     dates = [(target_date - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
 
-    # Generate synthetic heatmap values for demonstration
-    import random
-    random.seed(42)
+    # Load actual fare data from database
+    init_db()
+    db = SessionLocal()
+    try:
+        start_dt = datetime.combine(target_date - timedelta(days=days - 1), time.min)
+        end_dt = datetime.combine(target_date, time.max)
+
+        records = (
+            db.query(Fare)
+            .filter(Fare.timestamp >= start_dt, Fare.timestamp <= end_dt)
+            .order_by(Fare.timestamp)
+            .all()
+        )
+
+        # Group by corridor and date, compute median total_fare with outlier filtering
+        grouped = defaultdict(list)
+        for r in records:
+            if r.total_fare < FARE_FLOOR or r.total_fare > FARE_CEILING:
+                continue
+            corridor_key = f"{r.origin}-{r.destination}"
+            date_key = r.timestamp.date().isoformat()
+            grouped[(corridor_key, date_key)].append(r.total_fare)
+
+        # Build matrix: rows = corridors, columns = dates
+        matrix = []
+        for corridor in corridors:
+            row = []
+            for d in dates:
+                fares = grouped.get((corridor, d), [])
+                if fares:
+                    median_fare = round(sorted(fares)[len(fares) // 2], 2)
+                else:
+                    median_fare = 0.0
+                row.append(median_fare)
+            matrix.append(row)
+
+        # If DB returned no data, generate seed data as fallback
+        has_data = any(v != 0.0 for row in matrix for v in row)
+        if not has_data:
+            result = _generate_heatmap_from_seed(corridors, dates, target_date, days)
+            _swap_corridor_rows(result["corridors"], result["matrix"], "DEL-IXS", "DEL-MAA")
+            return result
+
+        # Swap DEL-IXS and DEL-MAA rows
+        _swap_corridor_rows(corridors, matrix, "DEL-IXS", "DEL-MAA")
+
+        return {
+            "corridors": corridors,
+            "dates": dates,
+            "matrix": matrix,
+            "unit": "INR",
+        }
+    finally:
+        db.close()
+
+
+def _generate_heatmap_from_seed(
+    corridors: list[str],
+    dates: list[str],
+    target_date: date,
+    days: int,
+) -> dict:
+    """Generate heatmap from seed data when database is empty."""
+    from skymetric.data.seed_data import generate_30_day_seed
+
+    earliest_needed = target_date - timedelta(days=days - 1)
+    total_days = days + 30
+    all_seed = generate_30_day_seed(
+        end_date=datetime.combine(target_date, datetime.min.time()),
+        days=total_days,
+    )
+
+    # Group by corridor and date, filter outliers, compute median
+    grouped = defaultdict(list)
+    for r in all_seed:
+        if r["total_fare"] < FARE_FLOOR or r["total_fare"] > FARE_CEILING:
+            continue
+        corridor_key = f"{r['origin']}-{r['destination']}"
+        date_key = r["timestamp"].date().isoformat()
+        grouped[(corridor_key, date_key)].append(r["total_fare"])
 
     matrix = []
     for corridor in corridors:
         row = []
-        base_val = random.uniform(3000, 7000)
         for d in dates:
-            noise = random.uniform(0.85, 1.15)
-            row.append(round(base_val * noise, 2))
+            fares = grouped.get((corridor, d), [])
+            if fares:
+                median_fare = round(sorted(fares)[len(fares) // 2], 2)
+            else:
+                median_fare = 0.0
+            row.append(median_fare)
         matrix.append(row)
 
     return {

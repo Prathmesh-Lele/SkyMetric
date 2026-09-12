@@ -15,16 +15,16 @@ from typing import List
 from skymetric.data.dgca_weights import CORRIDORS, CARRIERS, CARRIER_MARKET_SHARE, ADVANCE_WINDOWS
 
 BASE_FARE_RANGES = {
-    "DEL-BOM": (3000, 5500),
-    "DEL-BLR": (3500, 6500),
-    "BOM-BLR": (2800, 5000),
-    "DEL-CCU": (3200, 5800),
-    "DEL-HYD": (3400, 6200),
-    "BOM-MAA": (3000, 5200),
-    "BLR-HYD": (2200, 4000),
-    "DEL-MAA": (3600, 6800),
-    "DEL-IXS": (5000, 8500),
-    "DEL-DHM": (4500, 8000),
+    "DEL-BOM": (4200, 7000),
+    "DEL-BLR": (4500, 7800),
+    "BOM-BLR": (3800, 6500),
+    "DEL-CCU": (4300, 7200),
+    "DEL-HYD": (4500, 7500),
+    "BOM-MAA": (3900, 6600),
+    "BLR-HYD": (2800, 5000),
+    "DEL-MAA": (4800, 8000),
+    "DEL-IXS": (6000, 10000),
+    "DEL-DHM": (5500, 9500),
 }
 
 CARRIER_MULTIPLIER = {
@@ -95,7 +95,7 @@ def generate_fares_for_day(
 
                 # Occasionally inject outliers for testing pipeline robustness
                 if include_outliers and random.random() < 0.02:
-                    total *= random.choice([0.3, 3.5])
+                    total *= random.choice([0.6, 3.5])
 
                 base_fare_final = round(total * 0.70, 2)
                 taxes = round(total * 0.12 + random.uniform(100, 400), 2)
