@@ -68,63 +68,91 @@ OTA_CONFIGS = {
         "name": "IndiGo",
         "base_url": "https://www.goindigo.in",
         "search_path": "/search/flight-results",
+        "homepage": "https://www.goindigo.in",
         "enabled": True,
     },
     "air_india": {
         "name": "Air India",
         "base_url": "https://www.airindia.com",
         "search_path": "/flights",
+        "homepage": "https://www.airindia.com/in/en.html",
         "enabled": True,
     },
     "makemytrip": {
         "name": "MakeMyTrip",
         "base_url": "https://www.makemytrip.com",
         "search_path": "/flight/search",
+        "homepage": "https://www.makemytrip.com",
         "enabled": True,
     },
     "yatra": {
         "name": "Yatra",
         "base_url": "https://www.yatra.com",
-        "search_path": "/flights",
+        "search_path": "/flights/air/city",
+        "homepage": "https://www.yatra.com",
         "enabled": True,
     },
     "easeMyTrip": {
         "name": "EaseMyTrip",
         "base_url": "https://www.easemytrip.com",
-        "search_path": "/flights",
+        "search_path": "/flights/search/result",
+        "homepage": "https://www.easemytrip.com",
         "enabled": True,
     },
     "spicejet": {
         "name": "SpiceJet",
         "base_url": "https://www.spicejet.com",
         "search_path": "/",
+        "homepage": "https://www.spicejet.com",
         "enabled": True,
     },
     "akasaair": {
         "name": "Akasa Air",
         "base_url": "https://www.akasaair.com",
         "search_path": "/",
+        "homepage": "https://www.akasaair.com",
         "enabled": True,
     },
     "cleartrip": {
         "name": "Cleartrip",
         "base_url": "https://www.cleartrip.com",
         "search_path": "/flights/results",
+        "homepage": "https://www.cleartrip.com",
         "enabled": True,
     },
     "ixigo": {
         "name": "Ixigo",
         "base_url": "https://www.ixigo.com",
         "search_path": "/search/result/flight",
+        "homepage": "https://www.ixigo.com",
         "enabled": True,
     },
     "goibibo": {
         "name": "Goibibo",
         "base_url": "https://www.goibibo.com",
-        "search_path": "/flights",
+        "search_path": "/flight/search",
+        "homepage": "https://www.goibibo.com",
         "enabled": True,
     },
 }
+
+
+def _format_date(source_key: str, departure_date: datetime) -> str:
+    """Format date according to each source's expected format."""
+    date_formats = {
+        "indigo": "%d-%m-%Y",
+        "air_india": "%Y-%m-%d",
+        "makemytrip": "%d/%m/%Y",
+        "yatra": "%d-%m-%Y",
+        "easeMyTrip": "%d-%m-%Y",
+        "spicejet": "%Y-%m-%d",
+        "akasaair": "%Y-%m-%d",
+        "cleartrip": "%d/%m/%Y",
+        "ixigo": "%d%m%Y",
+        "goibibo": "%d/%m/%Y",
+    }
+    fmt = date_formats.get(source_key, "%Y-%m-%d")
+    return departure_date.strftime(fmt)
 
 
 @dataclass
@@ -169,10 +197,26 @@ class PlaywrightScraper(BaseScraper):
 
     def __init__(self):
         self.status = ScraperStatus()
-        self._rate_limit_delay = 2.0
+        self._rate_limit_delay = 5.0
         self._max_retries = 3
         self._backoff_base = 1.0
         self._session_file = "skymetric_session.json"
+
+    async def _warmup(self, context, source_key: str):
+        """Visit homepage first to set cookies and avoid detection."""
+        config = OTA_CONFIGS.get(source_key, {})
+        homepage = config.get("homepage")
+        if not homepage:
+            return
+        try:
+            page = await context.new_page()
+            await _stealth.apply_stealth_async(page)
+            await page.goto(homepage, wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(2000)
+            await page.close()
+            logger.info(f"Warmup complete for {source_key}")
+        except Exception as e:
+            logger.debug(f"Warmup failed for {source_key}: {e}")
 
     async def _create_browser_context(self):
         """Create a stealth browser context with random user agent.
@@ -221,25 +265,25 @@ class PlaywrightScraper(BaseScraper):
         except Exception as e:
             logger.warning(f"Failed to save session: {e}")
 
-    async def _scrape_indigo(self, context, origin: str, destination: str, date: str) -> List[Dict]:
-        """Scrape IndiGo fares."""
+    async def _scrape_indigo(self, context, origin: str, destination: str, date_str: str, advance_window_days: int) -> List[Dict]:
+        """Scrape IndiGo fares. Date format: DD-MM-YYYY."""
         page = await context.new_page()
         await _stealth.apply_stealth_async(page)
         try:
-            url = f"https://www.goindigo.in/search/flight-results?from={origin}&to={destination}&date={date}&adults=1&children=0&infants=0&class=E"
+            url = f"https://www.goindigo.in/search/flight-results?from={origin}&to={destination}&date={date_str}&adults=1&children=0&infants=0&class=E"
             if not robots_checker.is_allowed(url):
                 logger.info(f"IndiGo: blocked by robots.txt — skipping {url}")
                 return []
-            await page.goto(url, wait_until="networkidle", timeout=30000)
-            await page.wait_for_timeout(3000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(5000)
 
             fares = []
-            flight_cards = await page.query_selector_all('.flight-listing-wrap, .flight-list-item, .flight-card')
+            flight_cards = await page.query_selector_all('.flight-listing-wrap, .flight-list-item, .flight-card, [class*="flight"]')
 
             for card in flight_cards[:10]:
                 try:
-                    fare_el = await card.query_selector('.flight-price, .price-wrap, [data-testid="fare"]')
-                    carrier_el = await card.query_selector('.airline-name, .carrier-logo + span')
+                    fare_el = await card.query_selector('.flight-price, .price-wrap, [data-testid="fare"], [class*="price"], [class*="fare"]')
+                    carrier_el = await card.query_selector('.airline-name, .carrier-logo + span, [class*="airline"]')
 
                     fare = 0
                     if fare_el:
@@ -248,9 +292,9 @@ class PlaywrightScraper(BaseScraper):
 
                     carrier = "IndiGo"
                     if carrier_el:
-                        carrier = await carrier_el.inner_text()
+                        carrier = (await carrier_el.inner_text()).strip()
 
-                    if fare > 0:
+                    if fare > 1000:
                         fares.append({
                             "origin": origin,
                             "destination": destination,
@@ -263,7 +307,7 @@ class PlaywrightScraper(BaseScraper):
                             "udf": round(fare * 0.08, 2),
                             "convenience_charge": round(fare * 0.10, 2),
                             "fare_class": "economy",
-                            "advance_window_days": 0,
+                            "advance_window_days": advance_window_days,
                             "source_platform": "indigo",
                             "timestamp": datetime.now().isoformat(),
                         })
@@ -278,25 +322,25 @@ class PlaywrightScraper(BaseScraper):
         finally:
             await page.close()
 
-    async def _scrape_makemytrip(self, context, origin: str, destination: str, date: str) -> List[Dict]:
-        """Scrape MakeMyTrip fares."""
+    async def _scrape_makemytrip(self, context, origin: str, destination: str, date_str: str, advance_window_days: int) -> List[Dict]:
+        """Scrape MakeMyTrip fares. Date format: DD/MM/YYYY."""
         page = await context.new_page()
         await _stealth.apply_stealth_async(page)
         try:
-            url = f"https://www.makemytrip.com/flight/search?itinerary={origin}-{destination}-{date}&tripType=O&paxType=A-1_C-0_I-0&intl=false&cabinClass=E"
+            url = f"https://www.makemytrip.com/flight/search?itinerary={origin}-{destination}-{date_str}&tripType=O&paxType=A-1_C-0_I-0&intl=false&cabinClass=E"
             if not robots_checker.is_allowed(url):
                 logger.info(f"MakeMyTrip: blocked by robots.txt — skipping {url}")
                 return []
-            await page.goto(url, wait_until="networkidle", timeout=30000)
-            await page.wait_for_timeout(5000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(6000)
 
             fares = []
-            flight_cards = await page.query_selector_all('.fswInnerWrap, .appendBottom8, .flightCard')
+            flight_cards = await page.query_selector_all('.fswInnerWrap, .appendBottom8, .flightCard, [class*="flightCard"], [class*="makeFlex"]')
 
             for card in flight_cards[:10]:
                 try:
-                    fare_el = await card.query_selector('.textRight, .fare, .pullRight')
-                    carrier_el = await card.query_selector('.airline-name, .appendBottom2')
+                    fare_el = await card.query_selector('.textRight, .fare, .pullRight, [class*="price"], [class*="fare"]')
+                    carrier_el = await card.query_selector('.airline-name, .appendBottom2, [class*="airline"]')
 
                     fare = 0
                     if fare_el:
@@ -307,7 +351,7 @@ class PlaywrightScraper(BaseScraper):
                     if carrier_el:
                         carrier = (await carrier_el.inner_text()).strip()
 
-                    if fare > 0:
+                    if fare > 1000:
                         fares.append({
                             "origin": origin,
                             "destination": destination,
@@ -320,7 +364,7 @@ class PlaywrightScraper(BaseScraper):
                             "udf": round(fare * 0.08, 2),
                             "convenience_charge": round(fare * 0.10, 2),
                             "fare_class": "economy",
-                            "advance_window_days": 0,
+                            "advance_window_days": advance_window_days,
                             "source_platform": "makemytrip",
                             "timestamp": datetime.now().isoformat(),
                         })
@@ -335,25 +379,25 @@ class PlaywrightScraper(BaseScraper):
         finally:
             await page.close()
 
-    async def _scrape_cleartrip(self, context, origin: str, destination: str, date: str) -> List[Dict]:
-        """Scrape Cleartrip fares."""
+    async def _scrape_cleartrip(self, context, origin: str, destination: str, date_str: str, advance_window_days: int) -> List[Dict]:
+        """Scrape Cleartrip fares. Date format: DD/MM/YYYY."""
         page = await context.new_page()
         await _stealth.apply_stealth_async(page)
         try:
-            url = f"https://www.cleartrip.com/flights/results?from={origin}&to={destination}&depart_date={date}&adults=1&childs=0&infants=0&class=E"
+            url = f"https://www.cleartrip.com/flights/results?adults=1&childs=0&infants=0&depart_date={date_str}&from={origin}&to={destination}&intl=n&sd=0&page=1&sort=price_a&class=E"
             if not robots_checker.is_allowed(url):
                 logger.info(f"Cleartrip: blocked by robots.txt — skipping {url}")
                 return []
-            await page.goto(url, wait_until="networkidle", timeout=30000)
-            await page.wait_for_timeout(3000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(5000)
 
             fares = []
-            flight_cards = await page.query_selector_all('.flight-card, .result-card, [data-testid="flight-card"]')
+            flight_cards = await page.query_selector_all('.flight-card, .result-card, [data-testid="flight-card"], [class*="listing"], [class*="result"]')
 
             for card in flight_cards[:10]:
                 try:
-                    fare_el = await card.query_selector('.fare-price, .price, [data-testid="fare"]')
-                    carrier_el = await card.query_selector('.airline-name, .carrier')
+                    fare_el = await card.query_selector('.fare-price, .price, [data-testid="fare"], [class*="price"], [class*="fare"]')
+                    carrier_el = await card.query_selector('.airline-name, .carrier, [class*="airline"]')
 
                     fare = 0
                     if fare_el:
@@ -364,7 +408,7 @@ class PlaywrightScraper(BaseScraper):
                     if carrier_el:
                         carrier = (await carrier_el.inner_text()).strip()
 
-                    if fare > 0:
+                    if fare > 1000:
                         fares.append({
                             "origin": origin,
                             "destination": destination,
@@ -377,7 +421,7 @@ class PlaywrightScraper(BaseScraper):
                             "udf": round(fare * 0.08, 2),
                             "convenience_charge": round(fare * 0.10, 2),
                             "fare_class": "economy",
-                            "advance_window_days": 0,
+                            "advance_window_days": advance_window_days,
                             "source_platform": "cleartrip",
                             "timestamp": datetime.now().isoformat(),
                         })
@@ -392,25 +436,25 @@ class PlaywrightScraper(BaseScraper):
         finally:
             await page.close()
 
-    async def _scrape_ixigo(self, context, origin: str, destination: str, date: str) -> List[Dict]:
-        """Scrape Ixigo fares."""
+    async def _scrape_ixigo(self, context, origin: str, destination: str, date_str: str, advance_window_days: int) -> List[Dict]:
+        """Scrape Ixigo fares. Date format: DDMMYYYY."""
         page = await context.new_page()
         await _stealth.apply_stealth_async(page)
         try:
-            url = f"https://www.ixigo.com/search/result/flight?from={origin}&to={destination}&date={date}&adults=1&children=0&infants=0&class=e"
+            url = f"https://www.ixigo.com/search/result/flight?from={origin}&to={destination}&date={date_str}&adults=1&children=0&infants=0&class=e&source=Search+Form"
             if not robots_checker.is_allowed(url):
                 logger.info(f"Ixigo: blocked by robots.txt — skipping {url}")
                 return []
-            await page.goto(url, wait_until="networkidle", timeout=30000)
-            await page.wait_for_timeout(4000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(5000)
 
             fares = []
-            flight_cards = await page.query_selector_all('.flight-card, [data-testid="flight-card"], .result-card')
+            flight_cards = await page.query_selector_all('.flight-card, [data-testid="flight-card"], .result-card, [class*="flight"], [class*="result"]')
 
             for card in flight_cards[:10]:
                 try:
-                    fare_el = await card.query_selector('[data-testid="fare"], .fare, .price')
-                    carrier_el = await card.query_selector('.airline, .carrier-name')
+                    fare_el = await card.query_selector('[data-testid="fare"], .fare, .price, [class*="price"], [class*="fare"]')
+                    carrier_el = await card.query_selector('.airline, .carrier-name, [class*="airline"]')
 
                     fare = 0
                     if fare_el:
@@ -421,7 +465,7 @@ class PlaywrightScraper(BaseScraper):
                     if carrier_el:
                         carrier = (await carrier_el.inner_text()).strip()
 
-                    if fare > 0:
+                    if fare > 1000:
                         fares.append({
                             "origin": origin,
                             "destination": destination,
@@ -434,7 +478,7 @@ class PlaywrightScraper(BaseScraper):
                             "udf": round(fare * 0.08, 2),
                             "convenience_charge": round(fare * 0.10, 2),
                             "fare_class": "economy",
-                            "advance_window_days": 0,
+                            "advance_window_days": advance_window_days,
                             "source_platform": "ixigo",
                             "timestamp": datetime.now().isoformat(),
                         })
@@ -449,25 +493,25 @@ class PlaywrightScraper(BaseScraper):
         finally:
             await page.close()
 
-    async def _scrape_goibibo(self, context, origin: str, destination: str, date: str) -> List[Dict]:
-        """Scrape Goibibo fares."""
+    async def _scrape_goibibo(self, context, origin: str, destination: str, date_str: str, advance_window_days: int) -> List[Dict]:
+        """Scrape Goibibo fares. Date format: DD/MM/YYYY."""
         page = await context.new_page()
         await _stealth.apply_stealth_async(page)
         try:
-            url = f"https://www.goibibo.com/flights/search?departure={date}&from={origin}&to={destination}&adults=1&childs=0&infants=0&class=e"
+            url = f"https://www.goibibo.com/flight/search?itinerary={origin}-{destination}-{date_str}&tripType=O&paxType=A-1_C-0_I-0&cabinClass=E"
             if not robots_checker.is_allowed(url):
                 logger.info(f"Goibibo: blocked by robots.txt — skipping {url}")
                 return []
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            await page.wait_for_timeout(3000)
+            await page.wait_for_timeout(5000)
 
             fares = []
-            flight_cards = await page.query_selector_all('.fswCard, .flight-card, .result-card')
+            flight_cards = await page.query_selector_all('.fswCard, .flight-card, .result-card, [class*="flight"], [class*="card"]')
 
             for card in flight_cards[:10]:
                 try:
-                    fare_el = await card.query_selector('.fare, .price, [data-testid="fare"]')
-                    carrier_el = await card.query_selector('.airline-name, .carrier')
+                    fare_el = await card.query_selector('.fare, .price, [data-testid="fare"], [class*="price"], [class*="fare"]')
+                    carrier_el = await card.query_selector('.airline-name, .carrier, [class*="airline"]')
 
                     fare = 0
                     if fare_el:
@@ -478,7 +522,7 @@ class PlaywrightScraper(BaseScraper):
                     if carrier_el:
                         carrier = (await carrier_el.inner_text()).strip()
 
-                    if fare > 0:
+                    if fare > 1000:
                         fares.append({
                             "origin": origin,
                             "destination": destination,
@@ -491,7 +535,7 @@ class PlaywrightScraper(BaseScraper):
                             "udf": round(fare * 0.08, 2),
                             "convenience_charge": round(fare * 0.10, 2),
                             "fare_class": "economy",
-                            "advance_window_days": 0,
+                            "advance_window_days": advance_window_days,
                             "source_platform": "goibibo",
                             "timestamp": datetime.now().isoformat(),
                         })
@@ -506,23 +550,23 @@ class PlaywrightScraper(BaseScraper):
         finally:
             await page.close()
 
-    async def _scrape_generic_ota(self, context, ota_key: str, origin: str, destination: str, date: str) -> List[Dict]:
-        """Generic scraper for other OTAs with similar structure."""
+    async def _scrape_generic_ota(self, context, ota_key: str, origin: str, destination: str, date_str: str, advance_window_days: int) -> List[Dict]:
+        """Generic scraper for OTAs with similar structure."""
         config = OTA_CONFIGS.get(ota_key, {})
         page = await context.new_page()
         await _stealth.apply_stealth_async(page)
         try:
-            url = f"{config['base_url']}{config['search_path']}?from={origin}&to={destination}&date={date}"
+            url = f"{config['base_url']}{config['search_path']}?from={origin}&to={destination}&date={date_str}"
             if not robots_checker.is_allowed(url):
                 logger.info(f"{config['name']}: blocked by robots.txt — skipping {url}")
                 return []
-            await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-            await page.wait_for_timeout(3000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=25000)
+            await page.wait_for_timeout(4000)
 
             fares = []
-            fare_els = await page.query_selector_all('.fare, .price, .flight-price, [class*="price"]')
+            fare_els = await page.query_selector_all('.fare, .price, .flight-price, [class*="price"], [class*="fare"]')
 
-            for el in fare_els[:5]:
+            for el in fare_els[:10]:
                 try:
                     text = await el.inner_text()
                     fare = int(''.join(filter(str.isdigit, text)) or 0)
@@ -539,7 +583,7 @@ class PlaywrightScraper(BaseScraper):
                             "udf": round(fare * 0.08, 2),
                             "convenience_charge": round(fare * 0.10, 2),
                             "fare_class": "economy",
-                            "advance_window_days": 0,
+                            "advance_window_days": advance_window_days,
                             "source_platform": ota_key,
                             "timestamp": datetime.now().isoformat(),
                         })
@@ -561,7 +605,6 @@ class PlaywrightScraper(BaseScraper):
         advance_window_days: int,
     ) -> List[Dict]:
         """Scrape fares for a specific route and date from all enabled OTAs."""
-        date_str = departure_date.strftime("%Y-%m-%d")
         all_fares = []
 
         self.status.is_running = True
@@ -570,7 +613,7 @@ class PlaywrightScraper(BaseScraper):
         job = ScrapeJob(
             origin=origin,
             destination=destination,
-            departure_date=date_str,
+            departure_date=departure_date.strftime("%Y-%m-%d"),
             advance_window=advance_window_days,
             status="running",
             started_at=datetime.now(),
@@ -593,11 +636,11 @@ class PlaywrightScraper(BaseScraper):
                     ("cleartrip", self._scrape_cleartrip),
                     ("ixigo", self._scrape_ixigo),
                     ("goibibo", self._scrape_goibibo),
-                    ("air_india", lambda ctx, o, d, dt: self._scrape_generic_ota(ctx, "air_india", o, d, dt)),
-                    ("yatra", lambda ctx, o, d, dt: self._scrape_generic_ota(ctx, "yatra", o, d, dt)),
-                    ("easeMyTrip", lambda ctx, o, d, dt: self._scrape_generic_ota(ctx, "easeMyTrip", o, d, dt)),
-                    ("spicejet", lambda ctx, o, d, dt: self._scrape_generic_ota(ctx, "spicejet", o, d, dt)),
-                    ("akasaair", lambda ctx, o, d, dt: self._scrape_generic_ota(ctx, "akasaair", o, d, dt)),
+                    ("air_india", lambda ctx, o, d, dt, aw: self._scrape_generic_ota(ctx, "air_india", o, d, dt, aw)),
+                    ("yatra", lambda ctx, o, d, dt, aw: self._scrape_generic_ota(ctx, "yatra", o, d, dt, aw)),
+                    ("easeMyTrip", lambda ctx, o, d, dt, aw: self._scrape_generic_ota(ctx, "easeMyTrip", o, d, dt, aw)),
+                    ("spicejet", lambda ctx, o, d, dt, aw: self._scrape_generic_ota(ctx, "spicejet", o, d, dt, aw)),
+                    ("akasaair", lambda ctx, o, d, dt, aw: self._scrape_generic_ota(ctx, "akasaair", o, d, dt, aw)),
                 ]
 
                 for ota_key, scraper_fn in scrapers:
@@ -608,13 +651,17 @@ class PlaywrightScraper(BaseScraper):
                         ))
                         continue
 
+                    date_str = _format_date(ota_key, departure_date)
+                    logger.info(f"Scraping {config['name']} with date={date_str} ({ota_key})")
+
                     start_ts = datetime.now()
                     try:
                         fares = []
                         last_error = None
                         for attempt in range(self._max_retries):
                             try:
-                                fares = await scraper_fn(context, origin, destination, date_str)
+                                await self._warmup(context, ota_key)
+                                fares = await scraper_fn(context, origin, destination, date_str, advance_window_days)
                                 break
                             except Exception as e:
                                 last_error = e
@@ -640,7 +687,7 @@ class PlaywrightScraper(BaseScraper):
                                 latency_ms=round(latency, 1)
                             ))
 
-                        await asyncio.sleep(self._rate_limit_delay + random.uniform(0, 1))
+                        await asyncio.sleep(self._rate_limit_delay + random.uniform(0, 3))
                     except Exception as e:
                         latency = (datetime.now() - start_ts).total_seconds() * 1000
                         logger.warning(f"OTA {ota_key} failed: {e}")
@@ -651,7 +698,6 @@ class PlaywrightScraper(BaseScraper):
                         continue
 
             finally:
-                # Save session state before closing browser
                 await self._save_session(context)
                 await browser.close()
                 await playwright.stop()
