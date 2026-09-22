@@ -1,10 +1,13 @@
 """FastAPI application entry point with endpoint registration."""
 
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from apscheduler.schedulers.background import BackgroundScheduler
 
+from skymetric.config.settings import settings
 from skymetric.api.routes.index import router as index_router
 from skymetric.api.routes.heatmap import router as heatmap_router
 from skymetric.api.routes.elasticity import router as elasticity_router
@@ -13,20 +16,26 @@ from skymetric.api.routes.backtest import router as backtest_router
 from skymetric.api.routes.cpi import router as cpi_router
 from skymetric.api.routes.analytics import router as analytics_router
 
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 scheduler = BackgroundScheduler()
 
 
 def _scheduled_scrape_job():
     """Daily scrape job triggered by APScheduler."""
-    import logging
     from datetime import datetime
     from skymetric.data.seed_data import generate_fares_for_day
     from skymetric.models.database import SessionLocal, init_db
     from skymetric.models.fare import Fare
 
-    logger = logging.getLogger("skymetric.scheduler")
-    logger.info("Running scheduled scrape job at %s", datetime.utcnow().isoformat())
+    sched_logger = logging.getLogger("skymetric.scheduler")
+    sched_logger.info("Running scheduled scrape job at %s", datetime.utcnow().isoformat())
     init_db()
     db = SessionLocal()
     try:
@@ -50,9 +59,9 @@ def _scheduled_scrape_job():
             )
             db.add(fare)
         db.commit()
-        logger.info("Scheduled job inserted %d fare records", len(records))
+        sched_logger.info("Scheduled job inserted %d fare records", len(records))
     except Exception as exc:
-        logger.error("Scheduled scrape job failed: %s", exc)
+        sched_logger.error("Scheduled scrape job failed: %s", exc)
         db.rollback()
     finally:
         db.close()
@@ -62,24 +71,44 @@ def _scheduled_scrape_job():
 async def lifespan(app: FastAPI):
     scheduler.add_job(_scheduled_scrape_job, "cron", hour=6, minute=0, id="daily_scrape")
     scheduler.start()
+    logger.info("SkyMetric API started — scheduler running, log level=%s", settings.LOG_LEVEL)
     yield
     scheduler.shutdown()
 
 
 app = FastAPI(
     title="SkyMetric - India Airfare Price Index",
-    description="Real-time airfare price index for Indian domestic corridors",
+    description="Real-time airfare price index for Indian domestic corridors. "
+    "Provides sector-level and national indices computed from live flight fare data "
+    "using established econometric methodologies (Jevons, Laspeyres, Fisher, Tornqvist).",
     version="1.0.0",
     lifespan=lifespan,
 )
 
+# CORS — specific origins instead of wildcard + credentials
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://skymetric.vercel.app",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Global exception handler — return proper HTTP status codes
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception on {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "path": request.url.path},
+    )
+
 
 app.include_router(index_router, prefix="/api/v1/index", tags=["Index"])
 app.include_router(heatmap_router, prefix="/api/v1/routes", tags=["Heatmap"])

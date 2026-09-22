@@ -1,26 +1,84 @@
 "use client";
 
+import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useHeatmap } from "@/lib/hooks";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-const CORRIDORS = ["DEL-BOM", "DEL-BLR", "BOM-BLR", "DEL-CCU", "DEL-HYD"];
-
-const FARE_DATA: Record<string, Record<string, number>> = {
-  "DEL-BOM": { Mon: 4200, Tue: 3980, Wed: 3850, Thu: 4050, Fri: 4500, Sat: 4800, Sun: 4600 },
-  "DEL-BLR": { Mon: 4800, Tue: 4550, Wed: 4400, Thu: 4650, Fri: 5100, Sat: 5400, Sun: 5200 },
-  "BOM-BLR": { Mon: 3600, Tue: 3400, Wed: 3300, Thu: 3500, Fri: 3900, Sat: 4200, Sun: 4000 },
-  "DEL-CCU": { Mon: 4400, Tue: 4150, Wed: 4000, Thu: 4250, Fri: 4700, Sat: 5000, Sun: 4800 },
-  "DEL-HYD": { Mon: 4600, Tue: 4350, Wed: 4200, Thu: 4450, Fri: 4900, Sat: 5200, Sun: 5000 },
-};
-
 export function DayOfWeekHeatmap() {
-  const allValues = Object.values(FARE_DATA).flatMap((d) => Object.values(d));
-  const minVal = Math.min(...allValues);
-  const maxVal = Math.max(...allValues);
+  const { data: heatmap, isLoading } = useHeatmap(30);
+
+  const { corridorData, minVal, maxVal } = useMemo(() => {
+    if (!heatmap) return { corridorData: [], minVal: 0, maxVal: 1 };
+
+    const dayOfWeekFares: Record<string, Record<string, number[]>> = {};
+
+    heatmap.corridors.forEach((corridor, rowIdx) => {
+      dayOfWeekFares[corridor] = {};
+      DAYS.forEach((d) => (dayOfWeekFares[corridor][d] = []));
+
+      heatmap.dates.forEach((dateStr, colIdx) => {
+        const fare = heatmap.matrix[rowIdx]?.[colIdx] ?? 0;
+        if (fare <= 0) return;
+        const dayIdx = new Date(dateStr).getDay();
+        const dayName = DAYS[(dayIdx + 6) % 7]; // Mon=0
+        dayOfWeekFares[corridor][dayName].push(fare);
+      });
+    });
+
+    const result = heatmap.corridors
+      .map((corridor) => {
+        const avgs: Record<string, number> = {};
+        DAYS.forEach((d) => {
+          const fares = dayOfWeekFares[corridor][d];
+          avgs[d] = fares.length
+            ? Math.round(fares.reduce((s, v) => s + v, 0) / fares.length)
+            : 0;
+        });
+        return { corridor, ...avgs };
+      })
+      .filter((row) => DAYS.some((d) => row[d] > 0));
+
+    const allValues = result.flatMap((r) => DAYS.map((d) => r[d]).filter((v) => v > 0));
+    return {
+      corridorData: result,
+      minVal: allValues.length ? Math.min(...allValues) : 0,
+      maxVal: allValues.length ? Math.max(...allValues) : 1,
+    };
+  }, [heatmap]);
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Day-of-Week Fare Pattern</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-[200px] w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!corridorData.length) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Day-of-Week Fare Pattern</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">No fare data available.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const range = maxVal - minVal || 1;
 
   function getColor(value: number): string {
+    if (value <= 0) return "bg-muted text-muted-foreground";
     const normalized = (value - minVal) / range;
     if (normalized < 0.25) return "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300";
     if (normalized < 0.5) return "bg-yellow-100 text-yellow-900 dark:bg-yellow-950/50 dark:text-yellow-300";
@@ -28,11 +86,18 @@ export function DayOfWeekHeatmap() {
     return "bg-red-100 text-red-900 dark:bg-red-950/50 dark:text-red-300";
   }
 
+  const isSeed = heatmap?.source === "seed";
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-sm font-medium">
           Day-of-Week Fare Pattern
+          {isSeed && (
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              (seed data)
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -57,20 +122,21 @@ export function DayOfWeekHeatmap() {
               </tr>
             </thead>
             <tbody>
-              {CORRIDORS.map((corridor) => (
-                <tr key={corridor} className="group">
+              {corridorData.map((row) => (
+                <tr key={row.corridor} className="group">
                   <td className="p-2 font-mono font-medium border-b group-hover:bg-accent/50">
-                    {corridor}
+                    {row.corridor}
                   </td>
                   {DAYS.map((day) => {
-                    const value = FARE_DATA[corridor][day];
+                    const value = row[day] ?? 0;
                     return (
                       <td
                         key={day}
                         className={`p-2 text-center font-mono rounded border ${getColor(value)} transition-transform hover:scale-105`}
-                        title={`${corridor} ${day}: ₹${value.toLocaleString("en-IN")}`}
+                        title={`${row.corridor} ${day}: ₹${value.toLocaleString("en-IN")}`}
+                        aria-label={`${row.corridor} ${day}: ₹${value.toLocaleString("en-IN")}`}
                       >
-                        ₹{(value / 1000).toFixed(1)}k
+                        {value > 0 ? `₹${(value / 1000).toFixed(1)}k` : "—"}
                       </td>
                     );
                   })}

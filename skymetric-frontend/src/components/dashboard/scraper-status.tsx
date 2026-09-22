@@ -9,25 +9,51 @@ import { useScraperStatus } from "@/lib/hooks";
 import { api } from "@/lib/api";
 
 const CITIES = ["DEL", "BOM", "BLR", "CCU", "HYD", "MAA", "IXS", "DHM"];
+const API_KEY = "skymetric-demo-key";
 
 export function ScraperStatusDashboard() {
-  const { data: status, refetch } = useScraperStatus();
+  const { data: status, refetch, isError } = useScraperStatus();
   const [origin, setOrigin] = useState("DEL");
   const [destination, setDestination] = useState("BOM");
   const [isRunning, setIsRunning] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   const handleRunScraper = async () => {
     setIsRunning(true);
+    setMessage(null);
     try {
-      await api.scraperRun(origin, destination);
-      setTimeout(() => {
-        refetch();
-        setIsRunning(false);
-      }, 2000);
-    } catch {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/scraper/run?origin=${origin}&destination=${destination}`,
+        { method: "POST", headers: { "X-API-Key": API_KEY } }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.detail || `Error: ${res.status}`);
+      } else {
+        setMessage(data.message || "Scraper triggered");
+        setTimeout(() => refetch(), 2000);
+      }
+    } catch (e) {
+      setMessage(`Failed: ${e instanceof Error ? e.message : "Unknown error"}`);
+    } finally {
       setIsRunning(false);
     }
   };
+
+  if (isError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Scraper Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-destructive">
+            Unable to connect to scraper API. Is the backend running?
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -101,6 +127,11 @@ export function ScraperStatusDashboard() {
               {status?.is_running || isRunning ? "Running..." : "Run Scraper"}
             </Button>
           </div>
+          {message && (
+            <p className="text-xs text-muted-foreground" role="status">
+              {message}
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>

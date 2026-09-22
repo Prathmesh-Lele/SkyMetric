@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 
 export function useDailyIndex(date?: string) {
@@ -6,6 +6,7 @@ export function useDailyIndex(date?: string) {
     queryKey: ["dailyIndex", date],
     queryFn: () => api.dailyIndex(date),
     staleTime: 60_000,
+    retry: 2,
   });
 }
 
@@ -14,6 +15,7 @@ export function useSectorIndices(date?: string) {
     queryKey: ["sectorIndices", date],
     queryFn: () => api.sectorIndices(date),
     staleTime: 60_000,
+    retry: 2,
   });
 }
 
@@ -22,6 +24,7 @@ export function useHeatmap(days = 30, date?: string) {
     queryKey: ["heatmap", days, date],
     queryFn: () => api.heatmap(days, date),
     staleTime: 300_000,
+    retry: 2,
   });
 }
 
@@ -30,6 +33,7 @@ export function useCarriers() {
     queryKey: ["carriers"],
     queryFn: () => api.carriers(),
     staleTime: 600_000,
+    retry: 2,
   });
 }
 
@@ -38,6 +42,7 @@ export function useElasticity(date?: string) {
     queryKey: ["elasticity", date],
     queryFn: () => api.elasticity(date),
     staleTime: 60_000,
+    retry: 2,
   });
 }
 
@@ -55,9 +60,23 @@ export function useScraperStatus() {
     queryKey: ["scraperStatus"],
     queryFn: () => api.scraperStatus(),
     staleTime: 5_000,
+    retry: 2,
     refetchInterval: (query) => {
       const status = query.state.data;
       return status?.is_running ? 2_000 : 30_000;
+    },
+  });
+}
+
+export function useScraperRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { origin?: string; destination?: string; date?: string }) =>
+      api.scraperRun(params.origin, params.destination, params.date),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["scraperStatus"] });
+      queryClient.invalidateQueries({ queryKey: ["dailyIndex"] });
+      queryClient.invalidateQueries({ queryKey: ["heatmap"] });
     },
   });
 }
@@ -67,6 +86,7 @@ export function useBacktest() {
     queryKey: ["backtest"],
     queryFn: () => api.backtest(),
     staleTime: 300_000,
+    retry: 2,
   });
 }
 
@@ -75,6 +95,7 @@ export function useCpi() {
     queryKey: ["cpi"],
     queryFn: () => api.cpiAll(),
     staleTime: 600_000,
+    retry: 2,
   });
 }
 
@@ -83,6 +104,7 @@ export function useSuperlative(date?: string) {
     queryKey: ["superlative", date],
     queryFn: () => api.superlative(date),
     staleTime: 60_000,
+    retry: 2,
   });
 }
 
@@ -91,6 +113,7 @@ export function useAnomalies(date?: string, threshold?: number) {
     queryKey: ["anomalies", date, threshold],
     queryFn: () => api.anomalies(date, threshold),
     staleTime: 60_000,
+    retry: 2,
   });
 }
 
@@ -99,5 +122,6 @@ export function useDataTrust(date?: string) {
     queryKey: ["dataTrust", date],
     queryFn: () => api.dataTrust(date),
     staleTime: 60_000,
+    retry: 2,
   });
 }

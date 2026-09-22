@@ -10,8 +10,8 @@ export default function ApiExplorerPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">API Explorer</h1>
         <p className="text-sm text-muted-foreground">
-          Interactive OpenAPI/Swagger console for MoSPI, RBI, and NSO analyst
-          queries
+          Interactive OpenAPI/Swagger console for SkyMetric airfare index
+          queries, analytics, and scraper controls
         </p>
       </div>
 

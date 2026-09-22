@@ -1,19 +1,30 @@
 """Scraper control API endpoints."""
 
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 
 from skymetric.scraper.playwright_scraper import scraper
+from skymetric.scraper.flight_api_client import flight_api_client
 from skymetric.data.dgca_weights import CORRIDORS, ADVANCE_WINDOWS
 from skymetric.data.seed_data import generate_30_day_seed
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+SCRAPER_API_KEY = "skymetric-demo-key"
 
 _daemon_task: Optional[asyncio.Task] = None
 _daemon_running = False
+
+
+def _verify_api_key(x_api_key: Optional[str] = Header(None)):
+    """Simple API key auth for mutating scraper routes."""
+    if x_api_key != SCRAPER_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing X-API-Key header")
 
 
 @router.get("/status")
@@ -28,46 +39,40 @@ async def run_scraper(
     origin: Optional[str] = None,
     destination: Optional[str] = None,
     date: Optional[str] = None,
+    x_api_key: Optional[str] = Header(None),
 ):
     """Trigger an ad-hoc scraper run.
 
-    Uses mock scraper when Playwright/Chromium is not installed.
-    Saves generated fares to the database.
+    Uses 3-tier fallback: fli -> SerpApi -> MockScraper.
+    Saves fetched fares to the database.
+    Requires X-API-Key header.
     """
+    _verify_api_key(x_api_key)
+
     if scraper.status.is_running:
-        return {"error": "Scraper is already running", "status": scraper.get_status()}
+        raise HTTPException(status_code=409, detail="Scraper is already running")
 
     origin_val = origin or "DEL"
     dest_val = destination or "BOM"
     date_str = date or datetime.now().strftime("%Y-%m-%d")
 
     async def _run():
-        from datetime import date as date_type
         from skymetric.models.database import SessionLocal, init_db
         from skymetric.models.fare import Fare
-        from skymetric.scraper.mock_scraper import MockScraper
 
         scraper.status.is_running = True
         scraper.status.total_jobs += 1
 
         try:
-            target_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date_type.today()
+            target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
             dep_datetime = datetime.combine(target_date, datetime.min.time())
 
-            # Try Playwright first, fall back to mock
-            try:
-                from playwright.async_api import async_playwright
-                pw = await async_playwright().start()
-                await pw.chromium.launch(headless=True)
-                await pw.stop()
-                # Chromium available — use Playwright scraper
-                fares = await scraper.scrape(origin_val, dest_val, dep_datetime, 1)
-            except Exception:
-                # Chromium not available — use mock scraper
-                mock = MockScraper()
-                fares = mock.scrape(origin_val, dest_val, dep_datetime, 15)
+            # 3-tier fallback: fli -> SerpApi -> MockScraper
+            fares, source = await flight_api_client.search_flights(
+                origin_val, dest_val, dep_datetime, 15
+            )
+            logger.info(f"Scraper run for {origin_val}-{dest_val}: source={source}, {len(fares)} fares")
 
-            # Save fares to database
             if fares:
                 init_db()
                 db = SessionLocal()
@@ -99,6 +104,7 @@ async def run_scraper(
             scraper.status.completed_jobs += 1
 
         except Exception as exc:
+            logger.error(f"Scraper run failed: {exc}", exc_info=True)
             scraper.status.failed_jobs += 1
         finally:
             scraper.status.is_running = False
@@ -135,8 +141,22 @@ async def run_scraper_all(background_tasks: BackgroundTasks):
         from skymetric.pipeline.normalizer import normalize_records
 
         scraper.status.is_running = True
-        mock = MockScraper()
         total_fares = []
+
+        # Check if Playwright is available
+        use_playwright = False
+        try:
+            from playwright.async_api import async_playwright
+            pw = await async_playwright().start()
+            browser = await pw.chromium.launch(headless=True)
+            await browser.close()
+            await pw.stop()
+            use_playwright = True
+            logger.info("Playwright available — using live scraper for /run-all")
+        except Exception:
+            logger.info("Playwright not available — falling back to MockScraper for /run-all")
+
+        mock = MockScraper() if not use_playwright else None
 
         try:
             init_db()
@@ -149,7 +169,12 @@ async def run_scraper_all(background_tasks: BackgroundTasks):
                     for advance in ADVANCE_WINDOWS:
                         target_date = today + timedelta(days=advance)
                         dep_datetime = datetime.combine(target_date, datetime.min.time())
-                        fares = mock.scrape(origin, dest, dep_datetime, advance)
+
+                        if use_playwright:
+                            fares = await scraper.scrape(origin, dest, dep_datetime, advance)
+                        else:
+                            fares = mock.scrape(origin, dest, dep_datetime, advance)
+
                         for r in fares:
                             fare = Fare(
                                 timestamp=r.get("timestamp", datetime.utcnow()),

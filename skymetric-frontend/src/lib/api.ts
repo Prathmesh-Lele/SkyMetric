@@ -18,6 +18,7 @@ export interface HeatmapResponse {
   dates: string[];
   matrix: number[][];
   unit: string;
+  source?: string;
 }
 
 export interface Carrier {
@@ -176,11 +177,20 @@ export const api = {
       `/api/v1/elasticity/${date ? `?target_date=${date}` : ""}`
     ),
   scraperStatus: () => fetchApi<ScraperStatus>("/api/v1/scraper/status"),
-  scraperRun: (origin?: string, destination?: string, date?: string) =>
-    fetchApi<ScraperRunResponse>(
-      `/api/v1/scraper/run${origin ? `?origin=${origin}` : ""}${destination ? `&destination=${destination}` : ""}${date ? `&date=${date}` : ""}`,
-      { method: "POST" }
-    ),
+  scraperRun: async (origin?: string, destination?: string, date?: string) => {
+    const params = new URLSearchParams();
+    if (origin) params.set("origin", origin);
+    if (destination) params.set("destination", destination);
+    if (date) params.set("date", date);
+    const qs = params.toString();
+    return fetchApi<ScraperRunResponse>(
+      `/api/v1/scraper/run${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        headers: { "X-API-Key": "skymetric-demo-key" },
+      }
+    );
+  },
   backtest: () => fetchApi<BacktestResponse>("/api/v1/backtest/compare"),
   cpiAll: () => fetchApi<{ cpi_general: CpiDataPoint[]; cpi_transport: CpiDataPoint[]; cpi_air_transport: CpiDataPoint[]; source: string; base_year: number; note: string }>("/api/v1/cpi"),
   cpiAirTransport: () => fetchApi<CpiResponse>("/api/v1/cpi/air-transport"),

@@ -17,18 +17,6 @@ FARE_FLOOR = 1800
 FARE_CEILING = 15000
 
 
-def _swap_corridor_rows(
-    corridors: list[str], matrix: list[list[float]], route_a: str, route_b: str
-):
-    """Swap matrix rows for two corridors in-place."""
-    try:
-        idx_a = corridors.index(route_a)
-        idx_b = corridors.index(route_b)
-        matrix[idx_a], matrix[idx_b] = matrix[idx_b], matrix[idx_a]
-    except ValueError:
-        pass
-
-
 @router.get("/heatmap")
 def get_heatmap_data(
     days: int = Query(30, description="Number of past days"),
@@ -81,17 +69,15 @@ def get_heatmap_data(
         has_data = any(v != 0.0 for row in matrix for v in row)
         if not has_data:
             result = _generate_heatmap_from_seed(corridors, dates, target_date, days)
-            _swap_corridor_rows(result["corridors"], result["matrix"], "DEL-IXS", "DEL-MAA")
+            result["source"] = "seed"
             return result
-
-        # Swap DEL-IXS and DEL-MAA rows
-        _swap_corridor_rows(corridors, matrix, "DEL-IXS", "DEL-MAA")
 
         return {
             "corridors": corridors,
             "dates": dates,
             "matrix": matrix,
             "unit": "INR",
+            "source": "database",
         }
     finally:
         db.close()

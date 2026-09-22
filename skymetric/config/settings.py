@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     API_PORT: int = 8000
     SCRAPER_MODE: str = "mock"
     LOG_LEVEL: str = "INFO"
+    SERPAPI_KEY: str = ""
 
     class Config:
         env_file = ".env"

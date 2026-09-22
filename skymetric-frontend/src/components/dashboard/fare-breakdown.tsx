@@ -10,22 +10,65 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartTooltip } from "@/components/dashboard/chart-tooltip";
-
-const FARE_DATA = [
-  { name: "Base Fare", value: 4200, color: "var(--chart-1)" },
-  { name: "Taxes & Fees", value: 980, color: "var(--chart-2)" },
-  { name: "Convenience", value: 250, color: "var(--chart-3)" },
-  { name: "UDF", value: 150, color: "var(--chart-4)" },
-];
+import { Skeleton } from "@/components/ui/skeleton";
+import { useHeatmap } from "@/lib/hooks";
 
 export function FareBreakdown() {
-  const total = FARE_DATA.reduce((sum, d) => sum + d.value, 0);
+  const { data: heatmap, isLoading } = useHeatmap(30);
+
+  const breakdown = heatmap
+    ? (() => {
+        const allFares = heatmap.matrix.flat().filter((v) => v > 0);
+        if (!allFares.length) return null;
+        const avg = allFares.reduce((s, v) => s + v, 0) / allFares.length;
+        return [
+          { name: "Base Fare", value: Math.round(avg * 0.70), color: "var(--chart-1)" },
+          { name: "Taxes & Fees", value: Math.round(avg * 0.12), color: "var(--chart-2)" },
+          { name: "Convenience", value: Math.round(avg * 0.10), color: "var(--chart-3)" },
+          { name: "UDF", value: Math.round(avg * 0.08), color: "var(--chart-4)" },
+        ];
+      })()
+    : null;
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Average Fare Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-[250px] w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!breakdown) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Average Fare Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">No fare data available.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const total = breakdown.reduce((sum, d) => sum + d.value, 0);
+  const isSeed = heatmap?.source === "seed";
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-sm font-medium">
           Average Fare Breakdown
+          {isSeed && (
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              (seed data)
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -33,7 +76,7 @@ export function FareBreakdown() {
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={FARE_DATA}
+                data={breakdown}
                 cx="50%"
                 cy="50%"
                 innerRadius={60}
@@ -41,7 +84,7 @@ export function FareBreakdown() {
                 paddingAngle={3}
                 dataKey="value"
               >
-                {FARE_DATA.map((entry, i) => (
+                {breakdown.map((entry, i) => (
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
@@ -65,7 +108,10 @@ export function FareBreakdown() {
           <div className="text-2xl font-bold font-mono">
             ₹{total.toLocaleString("en-IN")}
           </div>
-          <div className="text-xs text-muted-foreground">Total Average Fare</div>
+          <div className="text-xs text-muted-foreground">
+            Total Average Fare
+            {heatmap?.source && ` · source: ${heatmap.source}`}
+          </div>
         </div>
       </CardContent>
     </Card>
