@@ -5,13 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHeatmap } from "@/lib/hooks";
 
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+type Day = (typeof DAYS)[number];
+type HeatmapRow = { corridor: string } & Partial<Record<Day, number>>;
 
 export function DayOfWeekHeatmap() {
   const { data: heatmap, isLoading } = useHeatmap(30);
 
   const { corridorData, minVal, maxVal } = useMemo(() => {
-    if (!heatmap) return { corridorData: [], minVal: 0, maxVal: 1 };
+    if (!heatmap)
+      return { corridorData: [] as HeatmapRow[], minVal: 0, maxVal: 1 };
 
     const dayOfWeekFares: Record<string, Record<string, number[]>> = {};
 
@@ -28,20 +31,22 @@ export function DayOfWeekHeatmap() {
       });
     });
 
-    const result = heatmap.corridors
+    const result: HeatmapRow[] = heatmap.corridors
       .map((corridor) => {
-        const avgs: Record<string, number> = {};
+        const row: HeatmapRow = { corridor };
         DAYS.forEach((d) => {
           const fares = dayOfWeekFares[corridor][d];
-          avgs[d] = fares.length
+          row[d] = fares.length
             ? Math.round(fares.reduce((s, v) => s + v, 0) / fares.length)
             : 0;
         });
-        return { corridor, ...avgs };
+        return row;
       })
-      .filter((row) => DAYS.some((d) => row[d] > 0));
+      .filter((row) => DAYS.some((d) => (row[d] ?? 0) > 0));
 
-    const allValues = result.flatMap((r) => DAYS.map((d) => r[d]).filter((v) => v > 0));
+    const allValues = result.flatMap((r) =>
+      DAYS.map((d) => r[d] ?? 0).filter((v) => v > 0)
+    );
     return {
       corridorData: result,
       minVal: allValues.length ? Math.min(...allValues) : 0,

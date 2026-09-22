@@ -58,6 +58,7 @@ build/
 
 # Database files
 *.db
+*.db-journal
 *.sqlite3
 *.sqlite
 
