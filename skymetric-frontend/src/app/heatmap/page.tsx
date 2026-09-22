@@ -21,7 +21,7 @@ const CITY_NAMES: Record<string, string> = {
 };
 
 export default function HeatmapPage() {
-  const { data, isLoading } = useHeatmap(30);
+  const { data, isLoading, isError } = useHeatmap(30);
   const [selectedOrigin, setSelectedOrigin] = useState("all");
   const [selectedDest, setSelectedDest] = useState("all");
 
@@ -54,7 +54,20 @@ export default function HeatmapPage() {
     );
   }
 
-  if (!filteredData) return null;
+  if (isError || !filteredData) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Route Heatmap</h1>
+        </div>
+        <Card>
+          <CardContent className="p-8 text-center text-muted-foreground">
+            Heatmap data unavailable. Is the backend running on port 8000?
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const allValues = filteredData.matrix.flat();
   const minVal = Math.min(...allValues);

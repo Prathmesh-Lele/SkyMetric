@@ -16,9 +16,9 @@ import { useBacktest } from "@/lib/hooks";
 import { ChartTooltip } from "@/components/dashboard/chart-tooltip";
 
 export function BacktestChart() {
-  const { data, isLoading } = useBacktest();
+  const { data, isLoading, isError } = useBacktest();
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -27,6 +27,21 @@ export function BacktestChart() {
         <CardContent>
           <div className="h-[300px] flex items-center justify-center text-muted-foreground">
             Loading back-test data...
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Back-Test vs DGCA Benchmark</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+            Back-test unavailable. Is the backend running on port 8000?
           </div>
         </CardContent>
       </Card>

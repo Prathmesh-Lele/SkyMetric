@@ -3,14 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { Activity } from "lucide-react";
 import {
   LayoutDashboard,
   Map,
   TrendingUp,
   Plane,
   FileCode,
-  Activity,
   BarChart3,
+  FlaskConical,
+  Bot,
 } from "lucide-react";
 
 const navItems = [
@@ -19,6 +21,8 @@ const navItems = [
   { href: "/elasticity", label: "Lead-Time Curves", icon: TrendingUp },
   { href: "/carriers", label: "Carriers", icon: Plane },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/backtest", label: "Back-Test", icon: FlaskConical },
+  { href: "/scraper", label: "Scraper Control", icon: Bot },
   { href: "/api-explorer", label: "API Explorer", icon: FileCode },
 ];
 

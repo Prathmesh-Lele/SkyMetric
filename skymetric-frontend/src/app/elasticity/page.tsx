@@ -11,6 +11,7 @@ import {
   Legend,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { useElasticity } from "@/lib/hooks";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChartTooltip } from "@/components/dashboard/chart-tooltip";
@@ -29,7 +30,7 @@ const ROUTE_COLORS = [
 ];
 
 export default function ElasticityPage() {
-  const { data, isLoading } = useElasticity();
+  const { data, isLoading, isError } = useElasticity();
 
   if (isLoading) {
     return (
@@ -40,7 +41,22 @@ export default function ElasticityPage() {
     );
   }
 
-  if (!data) return null;
+  if (isError || !data) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Advance Purchase Elasticity
+          </h1>
+        </div>
+        <Card>
+          <CardContent className="p-8 text-center text-muted-foreground">
+            Elasticity data unavailable. Is the backend running on port 8000?
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const routes = Object.keys(data.curves);
   const windows = data.advance_windows;
@@ -55,14 +71,25 @@ export default function ElasticityPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Advance Purchase Elasticity
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Price curves across T+1 to T+45 advance booking windows
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Advance Purchase Elasticity
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Price curves across T+1 to T+45 advance booking windows
+          </p>
+        </div>
+        <Badge variant="outline" className="shrink-0">
+          Modeled estimate
+        </Badge>
       </div>
+
+      {data.note && (
+        <p className="text-xs text-muted-foreground border rounded-lg p-3 bg-muted/30">
+          {data.note}
+        </p>
+      )}
 
       <Card>
         <CardHeader>

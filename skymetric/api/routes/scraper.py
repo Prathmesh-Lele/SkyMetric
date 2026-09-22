@@ -22,9 +22,11 @@ _daemon_running = False
 
 
 def _verify_api_key(x_api_key: Optional[str] = Header(None)):
-    """Simple API key auth for mutating scraper routes."""
+    """API key auth for mutating scraper routes. Returns 401 when missing, 403 when wrong."""
+    if x_api_key is None:
+        raise HTTPException(status_code=401, detail="Missing X-API-Key header")
     if x_api_key != SCRAPER_API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid or missing X-API-Key header")
+        raise HTTPException(status_code=403, detail="Invalid X-API-Key")
 
 
 @router.get("/status")
@@ -43,7 +45,7 @@ async def run_scraper(
 ):
     """Trigger an ad-hoc scraper run.
 
-    Uses 3-tier fallback: fli -> SerpApi -> MockScraper.
+    Uses 2-tier fallback: SerpApi -> MockScraper.
     Saves fetched fares to the database.
     Requires X-API-Key header.
     """
@@ -67,7 +69,7 @@ async def run_scraper(
             target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
             dep_datetime = datetime.combine(target_date, datetime.min.time())
 
-            # 3-tier fallback: fli -> SerpApi -> MockScraper
+            # 2-tier fallback: SerpApi -> MockScraper
             fares, source = await flight_api_client.search_flights(
                 origin_val, dest_val, dep_datetime, 15
             )
@@ -122,11 +124,17 @@ async def run_scraper(
 
 
 @router.post("/run-all")
-async def run_scraper_all(background_tasks: BackgroundTasks):
+async def run_scraper_all(
+    background_tasks: BackgroundTasks,
+    x_api_key: Optional[str] = Header(None),
+):
     """Run scraper across all 10 corridors × 5 advance windows = 50 jobs.
 
     Uses mock scraper for speed. Each corridor gets quotes for T+1, T+7, T+15, T+30, T+45.
+    Requires X-API-Key header.
     """
+    _verify_api_key(x_api_key)
+
     if scraper.status.is_running:
         return {"error": "Scraper is already running", "status": scraper.get_status()}
 
@@ -266,11 +274,17 @@ def scraper_health():
 
 
 @router.post("/daemon/start")
-async def start_daemon(background_tasks: BackgroundTasks, interval_minutes: int = 30):
+async def start_daemon(
+    background_tasks: BackgroundTasks,
+    interval_minutes: int = 30,
+    x_api_key: Optional[str] = Header(None),
+):
     """Start continuous scraping daemon.
 
     Runs run-all every N minutes in the background.
+    Requires X-API-Key header.
     """
+    _verify_api_key(x_api_key)
     global _daemon_task, _daemon_running
 
     if _daemon_running:
@@ -338,8 +352,9 @@ async def start_daemon(background_tasks: BackgroundTasks, interval_minutes: int 
 
 
 @router.post("/daemon/stop")
-async def stop_daemon():
-    """Stop the continuous scraping daemon."""
+async def stop_daemon(x_api_key: Optional[str] = Header(None)):
+    """Stop the continuous scraping daemon. Requires X-API-Key header."""
+    _verify_api_key(x_api_key)
     global _daemon_task, _daemon_running
 
     if not _daemon_running:

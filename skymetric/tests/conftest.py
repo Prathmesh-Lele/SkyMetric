@@ -8,16 +8,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pytest
 from datetime import datetime, timedelta
 
-from skymetric.models.database import init_db, engine, Base
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
+
+from skymetric.models.database import Base
 from skymetric.data.seed_data import generate_fares_for_day
+
+# Isolated in-memory DB for tests — never touches the real skymetric.db
+test_engine = create_engine(
+    "sqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
 
 
 @pytest.fixture(autouse=True)
 def setup_database():
-    """Create fresh tables for each test."""
-    Base.metadata.create_all(bind=engine)
+    """Create fresh tables on an isolated in-memory DB for each test."""
+    Base.metadata.create_all(bind=test_engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    Base.metadata.drop_all(bind=test_engine)
 
 
 @pytest.fixture

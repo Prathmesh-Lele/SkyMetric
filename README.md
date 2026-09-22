@@ -23,13 +23,12 @@ Real-time airfare price index system for Indian domestic corridors. Computes sec
 │  • Tornqvist           │                                │
 │  • Chain-Laspeyres     │                                │
 ├─────────────────────────────────────────────────────────┤
-│  Scraper (3-tier fallback)                              │
-│  Tier 1: fli (Google Flights, no API key)               │
-│  Tier 2: SerpApi (Google Flights, free tier)            │
-│  Tier 3: MockScraper (synthetic, always available)      │
+│  Scraper (2-tier fallback)                             │
+│  Tier 1: SerpApi (Google Flights, free tier)            │
+│  Tier 2: MockScraper (synthetic, always available)      │
 ├─────────────────────────────────────────────────────────┤
 │  Storage: SQLite (SQLAlchemy ORM)                       │
-│  Scheduler: APScheduler (daily cron at 06:00 IST)        │
+│  Scheduler: APScheduler (daily cron at 06:00 server time)│
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -42,11 +41,18 @@ Real-time airfare price index system for Indian domestic corridors. Computes sec
 
 ### Backend
 
+Run all commands from the **repo root** (`videos/`):
+
 ```bash
-cd skymetric
 pip install -r requirements.txt
-cp .env.example .env   # edit SERPAPI_KEY if you have one
+cp skymetric/.env.example skymetric/.env   # edit SERPAPI_KEY if you have one
 uvicorn skymetric.api.main:app --reload --port 8000
+```
+
+Optional: seed the database with 30 days of fare data first:
+
+```bash
+python -m skymetric.main seed
 ```
 
 ### Frontend
@@ -79,11 +85,14 @@ docker-compose up -d
 | GET | `/api/v1/elasticity/` | Advance-purchase price curves |
 | GET | `/api/v1/backtest/compare` | SkyMetric vs DGCA benchmark |
 | GET | `/api/v1/cpi/` | CPI comparison (General/Transport/Air) |
+| GET | `/api/v1/cpi/air-transport` | CPI Air Transport series |
+| GET | `/api/v1/cpi/general` | CPI General series |
 | GET | `/api/v1/analytics/superlative` | Fisher/Paasche/Tornqvist indices |
 | GET | `/api/v1/analytics/anomalies` | Outlier detection (Z-score) |
 | GET | `/api/v1/analytics/data-trust` | Data quality scorecard |
 | GET | `/api/v1/analytics/export/csv` | CSV export |
 | GET | `/api/v1/scraper/status` | Scraper metrics |
+| GET | `/api/v1/scraper/health` | Scraper health check |
 | POST | `/api/v1/scraper/run` | Trigger single corridor scrape |
 | POST | `/api/v1/scraper/run-all` | Full 10-corridor scrape |
 | POST | `/api/v1/scraper/daemon/start` | Start continuous scraping |
@@ -95,9 +104,20 @@ Full interactive docs: http://localhost:8000/docs
 
 | Tier | Source | API Key? | Quota |
 |------|--------|----------|-------|
-| 1 | fli (Google Flights) | No | Unlimited |
-| 2 | SerpApi (Google Flights) | Yes (free) | 100-250/month |
-| 3 | MockScraper | No | Unlimited |
+| 1 | SerpApi (Google Flights) | Yes (free tier) | 100–250/month |
+| 2 | MockScraper (synthetic) | No | Unlimited |
+
+Set `SERPAPI_KEY` in `skymetric/.env` to enable live Google Flights data. Without a key, the system falls back to the deterministic MockScraper so the prototype always runs.
+
+## Future Work
+
+- **PostgreSQL** for multi-writer production workloads (SQLite today)
+- **Alembic migrations** for schema versioning
+- **More corridors** — expand beyond 10 to cover all DGCA city-pairs
+- **Hosted deployment** (Vercel + Railway/Render) with CI/CD
+- **Official DGCA / MoSPI live feeds** as primary data sources
+- **Per-user API keys** and rate limiting on the public API
+- **Alerting** — email/Slack notifications on anomaly spikes
 
 ## Corridors (10)
 
@@ -137,22 +157,30 @@ Weighted by DGCA 2023-24 passenger traffic:
 
 ## Testing
 
-```bash
-cd skymetric
-$env:PYTHONPATH = ".."
-python -m pytest tests/ -v
+Run from the repo root (PowerShell):
+
+```powershell
+$env:PYTHONPATH = "."
+python -m pytest skymetric/tests/ -v
 ```
 
-45 tests covering formulas, pipeline, scraper, and API endpoints.
+Or from `skymetric/`:
+
+```bash
+cd skymetric
+PYTHONPATH=.. python -m pytest tests/ -v
+```
+
+45 tests covering formulas, pipeline, scraper, and API endpoints. Tests use an isolated in-memory SQLite database and do not touch your real data.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS, Recharts |
-| Backend | Python 3.11, FastAPI, SQLAlchemy, APScheduler |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy, APScheduler |
 | Data | SQLite (dev), PostgreSQL (production planned) |
-| Scraping | fli, SerpApi, Playwright (optional) |
+| Scraping | SerpApi, Playwright (optional) |
 | Testing | pytest |
 
 ## Environment Variables

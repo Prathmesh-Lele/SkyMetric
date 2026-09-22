@@ -68,3 +68,9 @@ build/
 # Playwright
 playwright-report/
 test-results/
+
+# Local Ralph-loop state (never push)
+ralph-loop.local.md
+
+# Scratch scraper inspection dumps
+skymetric/dom_inspection_results/

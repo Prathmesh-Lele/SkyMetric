@@ -20,23 +20,25 @@ export default function DashboardPage() {
   const { data: backtest } = useBacktest();
   const { data: heatmap } = useHeatmap(30, selectedDate);
 
-  const headlineIndex = dailyIndex?.headline_index ?? 108.42;
+  const headlineIndex = dailyIndex?.headline_index;
+  const previousIndex = dailyIndex ? 100 : undefined; // vs base period (T-30 anchor = 100)
 
   const chartData = useMemo(() => {
     if (backtest?.dates?.length) {
+      // Convert avg-fare series to Base=100 index (first day = 100)
+      const baseFare = backtest.skymetric_index.find((v) => v > 0) ?? 1;
       return backtest.dates.map((date, i) => ({
         date: new Date(date).toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
-        index: backtest.skymetric_index[i] ?? 0,
+        index: Number(((backtest.skymetric_index[i] / baseFare) * 100).toFixed(2)),
       }));
     }
-    return Array.from({ length: 30 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (29 - i));
-      return {
-        date: d.toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
+    if (headlineIndex === undefined) return [];
+    return [
+      {
+        date: new Date().toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
         index: headlineIndex,
-      };
-    });
+      },
+    ];
   }, [backtest, headlineIndex]);
 
   const exportData = useMemo(() => {
@@ -77,7 +79,7 @@ export default function DashboardPage() {
 
       <KpiCards
         headlineIndex={headlineIndex}
-        previousIndex={97.5}
+        previousIndex={previousIndex}
         totalCorridors={10}
         isHealthy={health?.status === "healthy"}
       />

@@ -49,4 +49,8 @@ def get_elasticity_data(
         "advance_windows": ADVANCE_WINDOWS,
         "curves": curves,
         "anchor_window": 15,
+        "modeled": True,
+        "note": "Modeled lead-time multipliers based on typical airline pricing "
+                "patterns (T+1 premium, T+45 discount). Placeholder until live "
+                "booking-volume feeds are integrated.",
     }

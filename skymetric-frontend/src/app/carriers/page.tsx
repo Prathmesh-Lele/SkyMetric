@@ -42,7 +42,7 @@ const CARRIER_FARES: Record<string, number> = {
 };
 
 export default function CarriersPage() {
-  const { data, isLoading } = useCarriers();
+  const { data, isLoading, isError } = useCarriers();
 
   if (isLoading) {
     return (
@@ -53,7 +53,22 @@ export default function CarriersPage() {
     );
   }
 
-  if (!data) return null;
+  if (isError || !data) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Carrier Analysis
+          </h1>
+        </div>
+        <Card>
+          <CardContent className="p-8 text-center text-muted-foreground">
+            Carrier data unavailable. Is the backend running on port 8000?
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const chartData = data.carriers.map((c) => ({
     name: c.name,

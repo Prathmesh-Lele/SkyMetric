@@ -35,6 +35,8 @@ export interface ElasticityResponse {
   advance_windows: number[];
   curves: Record<string, Record<string, number>>;
   anchor_window: number;
+  modeled?: boolean;
+  note?: string;
 }
 
 export interface HealthResponse {
@@ -191,6 +193,11 @@ export const api = {
       }
     );
   },
+  scraperRunAll: () =>
+    fetchApi<ScraperRunResponse>("/api/v1/scraper/run-all", {
+      method: "POST",
+      headers: { "X-API-Key": "skymetric-demo-key" },
+    }),
   backtest: () => fetchApi<BacktestResponse>("/api/v1/backtest/compare"),
   cpiAll: () => fetchApi<{ cpi_general: CpiDataPoint[]; cpi_transport: CpiDataPoint[]; cpi_air_transport: CpiDataPoint[]; source: string; base_year: number; note: string }>("/api/v1/cpi"),
   cpiAirTransport: () => fetchApi<CpiResponse>("/api/v1/cpi/air-transport"),

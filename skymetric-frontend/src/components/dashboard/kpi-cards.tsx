@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { TrendingUp, TrendingDown, Activity, Plane } from "lucide-react";
 
 interface KpiCardsProps {
-  headlineIndex: number;
+  headlineIndex?: number;
   previousIndex?: number;
   totalCorridors: number;
   isHealthy: boolean;
@@ -17,7 +17,8 @@ export function KpiCards({
   totalCorridors,
   isHealthy,
 }: KpiCardsProps) {
-  const delta = headlineIndex - previousIndex;
+  const hasIndex = headlineIndex !== undefined;
+  const delta = hasIndex ? headlineIndex - previousIndex : 0;
   const deltaPct = previousIndex > 0 ? (delta / previousIndex) * 100 : 0;
   const isUp = delta >= 0;
 
@@ -31,7 +32,9 @@ export function KpiCards({
           <Activity className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-3xl font-bold">{headlineIndex.toFixed(2)}</div>
+          <div className="text-3xl font-bold">
+            {hasIndex ? headlineIndex.toFixed(2) : "—"}
+          </div>
           <p className="text-xs text-muted-foreground mt-1">
             T+15 Anchor · Base = 100
           </p>
@@ -41,7 +44,7 @@ export function KpiCards({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">
-            24h Change
+            Vs Base Period
           </CardTitle>
           {isUp ? (
             <TrendingUp className="h-4 w-4 text-destructive" />
@@ -55,11 +58,14 @@ export function KpiCards({
               isUp ? "text-destructive" : "text-emerald-500"
             }`}
           >
-            {isUp ? "+" : ""}
-            {deltaPct.toFixed(2)}%
+            {hasIndex ? `${isUp ? "+" : ""}${deltaPct.toFixed(2)}%` : "—"}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            {isUp ? "Prices rising" : "Prices falling"}
+            {hasIndex
+              ? isUp
+                ? "Prices rising vs base"
+                : "Prices falling vs base"
+              : "Awaiting index data"}
           </p>
         </CardContent>
       </Card>
