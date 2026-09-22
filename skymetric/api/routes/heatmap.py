@@ -65,19 +65,28 @@ def get_heatmap_data(
                 row.append(median_fare)
             matrix.append(row)
 
-        # If DB returned no data, generate seed data as fallback
+        # Source breakdown for transparency
+        from collections import Counter
+        src_counts = Counter(r.source_platform for r in records)
+
         has_data = any(v != 0.0 for row in matrix for v in row)
         if not has_data:
             result = _generate_heatmap_from_seed(corridors, dates, target_date, days)
             result["source"] = "seed"
+            result["source_breakdown"] = {}
+            result["live_fares"] = 0
             return result
 
+        live = src_counts.get("serpapi", 0)
+        source_label = "live" if live > 0 else "database"
         return {
             "corridors": corridors,
             "dates": dates,
             "matrix": matrix,
             "unit": "INR",
-            "source": "database",
+            "source": source_label,
+            "source_breakdown": dict(src_counts),
+            "live_fares": live,
         }
     finally:
         db.close()

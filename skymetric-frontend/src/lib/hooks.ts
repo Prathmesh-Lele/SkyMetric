@@ -5,8 +5,9 @@ export function useDailyIndex(date?: string) {
   return useQuery({
     queryKey: ["dailyIndex", date],
     queryFn: () => api.dailyIndex(date),
-    staleTime: 60_000,
+    staleTime: 30_000,
     retry: 2,
+    refetchInterval: 60_000,
   });
 }
 
@@ -14,8 +15,9 @@ export function useSectorIndices(date?: string) {
   return useQuery({
     queryKey: ["sectorIndices", date],
     queryFn: () => api.sectorIndices(date),
-    staleTime: 60_000,
+    staleTime: 30_000,
     retry: 2,
+    refetchInterval: 60_000,
   });
 }
 
@@ -23,8 +25,9 @@ export function useHeatmap(days = 30, date?: string) {
   return useQuery({
     queryKey: ["heatmap", days, date],
     queryFn: () => api.heatmap(days, date),
-    staleTime: 300_000,
+    staleTime: 60_000,
     retry: 2,
+    refetchInterval: 60_000,
   });
 }
 
@@ -43,6 +46,7 @@ export function useElasticity(date?: string) {
     queryFn: () => api.elasticity(date),
     staleTime: 60_000,
     retry: 2,
+    refetchInterval: 120_000,
   });
 }
 
@@ -50,8 +54,9 @@ export function useHealth() {
   return useQuery({
     queryKey: ["health"],
     queryFn: () => api.health(),
-    staleTime: 30_000,
+    staleTime: 15_000,
     retry: 3,
+    refetchInterval: 30_000,
   });
 }
 
@@ -63,7 +68,7 @@ export function useScraperStatus() {
     retry: 2,
     refetchInterval: (query) => {
       const status = query.state.data;
-      return status?.is_running ? 2_000 : 30_000;
+      return status?.is_running ? 2_000 : 15_000;
     },
   });
 }
@@ -77,6 +82,21 @@ export function useScraperRun() {
       queryClient.invalidateQueries({ queryKey: ["scraperStatus"] });
       queryClient.invalidateQueries({ queryKey: ["dailyIndex"] });
       queryClient.invalidateQueries({ queryKey: ["heatmap"] });
+      queryClient.invalidateQueries({ queryKey: ["sectorIndices"] });
+    },
+  });
+}
+
+export function useLiveRefresh() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (force?: boolean) => api.liveRefresh(force ?? false),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["scraperStatus"] });
+      queryClient.invalidateQueries({ queryKey: ["dailyIndex"] });
+      queryClient.invalidateQueries({ queryKey: ["heatmap"] });
+      queryClient.invalidateQueries({ queryKey: ["sectorIndices"] });
+      queryClient.invalidateQueries({ queryKey: ["dataTrust"] });
     },
   });
 }
@@ -105,6 +125,7 @@ export function useSuperlative(date?: string) {
     queryFn: () => api.superlative(date),
     staleTime: 60_000,
     retry: 2,
+    refetchInterval: 120_000,
   });
 }
 
@@ -114,6 +135,7 @@ export function useAnomalies(date?: string, threshold?: number) {
     queryFn: () => api.anomalies(date, threshold),
     staleTime: 60_000,
     retry: 2,
+    refetchInterval: 120_000,
   });
 }
 
@@ -123,5 +145,6 @@ export function useDataTrust(date?: string) {
     queryFn: () => api.dataTrust(date),
     staleTime: 60_000,
     retry: 2,
+    refetchInterval: 120_000,
   });
 }

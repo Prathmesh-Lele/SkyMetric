@@ -82,6 +82,7 @@ export default function DashboardPage() {
         previousIndex={previousIndex}
         totalCorridors={10}
         isHealthy={health?.status === "healthy"}
+        liveFares={dailyIndex?.live_fares ?? heatmap?.live_fares ?? 0}
       />
 
       <IndexChart data={chartData} isLoading={indexLoading} />

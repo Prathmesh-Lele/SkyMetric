@@ -1,24 +1,16 @@
-"""Flight API client with 3-tier fallback: fli -> SerpApi -> MockScraper.
+"""Flight API client with 2-tier fallback: SerpApi -> MockScraper.
 
-Tier 1: fli library (Google Flights data, no API key, unlimited)
-Tier 2: SerpApi (Google Flights data, 100-250 searches/month, needs API key)
-Tier 3: MockScraper (synthetic data, always available)
+Tier 1: SerpApi (Google Flights live data, needs SERPAPI_KEY)
+Tier 2: MockScraper (synthetic, always available)
 """
 
 import asyncio
 import logging
 import os
-import random
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
-
-try:
-    from skymetric.config.settings import settings
-    SERPAPI_KEY = settings.SERPAPI_KEY
-except Exception:
-    SERPAPI_KEY = os.getenv("SERPAPI_KEY", "")
 
 CARRIER_CODES = {
     "IndiGo": "6E",
@@ -30,6 +22,19 @@ CARRIER_CODES = {
 }
 
 CARRIER_BY_CODE = {v: k for k, v in CARRIER_CODES.items()}
+
+
+def _get_serpapi_key() -> str:
+    """Read SerpApi key from settings/env at call time (never cache empty)."""
+    try:
+        from skymetric.config.settings import settings
+
+        key = (settings.SERPAPI_KEY or "").strip()
+        if key:
+            return key
+    except Exception as exc:
+        logger.debug(f"settings load failed for SERPAPI_KEY: {exc}")
+    return (os.getenv("SERPAPI_KEY") or "").strip()
 
 
 def _build_fare_record(
@@ -61,68 +66,8 @@ def _build_fare_record(
         "fare_class": "economy",
         "advance_window_days": advance_window_days,
         "source_platform": source_platform,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(),
     }
-
-
-async def _search_fli(
-    origin: str,
-    destination: str,
-    date_str: str,
-    advance_window_days: int,
-) -> List[Dict]:
-    """Tier 1: Use fli library for Google Flights data."""
-    try:
-        from fli import search_flights
-    except ImportError:
-        logger.debug("fli not installed — skipping Tier 1")
-        return []
-
-    loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(
-        None,
-        lambda: search_flights(
-            origin=origin,
-            destination=destination,
-            date=date_str,
-            country="IN",
-            currency="INR",
-            format="json",
-        ),
-    )
-
-    if not results:
-        return []
-
-    fares = []
-    for flight in results if isinstance(results, list) else results.get("flights", []):
-        try:
-            price = flight.get("price") or flight.get("total_price") or 0
-            if price <= 0:
-                continue
-            carrier = flight.get("airline") or flight.get("carrier") or "Unknown"
-            flight_no = flight.get("flight_number") or flight.get("flightNumber") or ""
-            departure = flight.get("departure_time") or flight.get("departure") or ""
-
-            fares.append(
-                _build_fare_record(
-                    origin=origin,
-                    destination=destination,
-                    carrier=carrier,
-                    flight_number=flight_no,
-                    departure_time=departure,
-                    total_fare=float(price),
-                    advance_window_days=advance_window_days,
-                    source_platform="fli",
-                )
-            )
-        except Exception as e:
-            logger.debug(f"Failed to parse fli flight: {e}")
-            continue
-
-    if fares:
-        logger.info(f"fli returned {len(fares)} fares for {origin}-{destination}")
-    return fares
 
 
 async def _search_serpapi(
@@ -131,9 +76,10 @@ async def _search_serpapi(
     date_str: str,
     advance_window_days: int,
 ) -> List[Dict]:
-    """Tier 2: Use SerpApi for Google Flights data."""
-    if not SERPAPI_KEY:
-        logger.debug("SERPAPI_KEY not set — skipping Tier 2")
+    """Tier 1: Live Google Flights data via SerpApi (one-way)."""
+    api_key = _get_serpapi_key()
+    if not api_key:
+        logger.debug("SERPAPI_KEY not set — skipping Tier 1 (SerpApi)")
         return []
 
     import httpx
@@ -143,19 +89,27 @@ async def _search_serpapi(
         "departure_id": origin,
         "arrival_id": destination,
         "outbound_date": date_str,
+        "type": "2",  # one-way
         "currency": "INR",
         "gl": "in",
         "hl": "en",
-        "api_key": SERPAPI_KEY,
+        "api_key": api_key,
     }
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=20.0) as client:
         resp = await client.get("https://serpapi.com/search", params=params)
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            logger.warning(f"SerpApi HTTP {resp.status_code}: {resp.text[:200]}")
+            return []
         data = resp.json()
+
+    if data.get("error"):
+        logger.warning(f"SerpApi error: {data['error']}")
+        return []
 
     best_flights = data.get("best_flights", []) + data.get("other_flights", [])
     if not best_flights:
+        logger.info(f"SerpApi returned 0 flights for {origin}-{destination} {date_str}")
         return []
 
     fares = []
@@ -167,12 +121,8 @@ async def _search_serpapi(
 
             airline_info = flight.get("flights", [{}])[0] if flight.get("flights") else {}
             carrier = airline_info.get("airline") or "Unknown"
-            flight_no_raw = airline_info.get("flight_number") or ""
+            flight_number = airline_info.get("flight_number") or ""
             departure = airline_info.get("departure_airport", {}).get("time") or ""
-
-            flight_number = flight_no_raw
-            if not flight_number.startswith(("6E", "AI", "UK", "SG", "QP", "IX")):
-                flight_number = f"{flight_no_raw}"
 
             fares.append(
                 _build_fare_record(
@@ -191,7 +141,7 @@ async def _search_serpapi(
             continue
 
     if fares:
-        logger.info(f"SerpApi returned {len(fares)} fares for {origin}-{destination}")
+        logger.info(f"SerpApi LIVE returned {len(fares)} fares for {origin}-{destination}")
     return fares
 
 
@@ -201,7 +151,7 @@ async def _search_mock(
     departure_date: datetime,
     advance_window_days: int,
 ) -> List[Dict]:
-    """Tier 3: Use MockScraper for synthetic data."""
+    """Tier 2: MockScraper for synthetic fallback data."""
     from skymetric.scraper.mock_scraper import MockScraper
 
     mock = MockScraper()
@@ -216,10 +166,15 @@ async def _search_mock(
 
 
 class FlightApiClient:
-    """3-tier fallback flight data client: fli -> SerpApi -> MockScraper."""
+    """2-tier fallback flight data client: SerpApi -> MockScraper."""
 
     def __init__(self):
         self._last_source: Optional[str] = None
+        self._last_count: int = 0
+
+    @property
+    def live_enabled(self) -> bool:
+        return bool(_get_serpapi_key())
 
     async def search_flights(
         self,
@@ -227,39 +182,32 @@ class FlightApiClient:
         destination: str,
         departure_date: datetime,
         advance_window_days: int,
+        prefer_live: bool = True,
     ) -> Tuple[List[Dict], str]:
-        """Search flights with 3-tier fallback.
-
-        Returns:
-            Tuple of (fares list, source tier name)
-        """
+        """Search flights. Returns (fares, source) where source is serpapi|mock|none."""
         date_str = departure_date.strftime("%Y-%m-%d")
 
-        # Tier 1: fli
-        try:
-            fares = await _search_fli(origin, destination, date_str, advance_window_days)
-            if fares:
-                self._last_source = "fli"
-                return fares, "fli"
-        except Exception as e:
-            logger.warning(f"fli failed (Tier 1): {e}")
+        if prefer_live and self.live_enabled:
+            try:
+                fares = await _search_serpapi(
+                    origin, destination, date_str, advance_window_days
+                )
+                if fares:
+                    self._last_source = "serpapi"
+                    self._last_count = len(fares)
+                    return fares, "serpapi"
+            except Exception as e:
+                logger.warning(f"SerpApi failed (Tier 1): {e}")
 
-        # Tier 2: SerpApi
         try:
-            fares = await _search_serpapi(origin, destination, date_str, advance_window_days)
-            if fares:
-                self._last_source = "serpapi"
-                return fares, "serpapi"
-        except Exception as e:
-            logger.warning(f"SerpApi failed (Tier 2): {e}")
-
-        # Tier 3: MockScraper
-        try:
-            fares = await _search_mock(origin, destination, departure_date, advance_window_days)
+            fares = await _search_mock(
+                origin, destination, departure_date, advance_window_days
+            )
             self._last_source = "mock"
+            self._last_count = len(fares)
             return fares, "mock"
         except Exception as e:
-            logger.error(f"MockScraper failed (Tier 3): {e}")
+            logger.error(f"MockScraper failed (Tier 2): {e}")
             return [], "none"
 
     def get_last_source(self) -> Optional[str]:

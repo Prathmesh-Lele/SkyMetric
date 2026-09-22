@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHeatmap } from "@/lib/hooks";
 
@@ -92,17 +93,23 @@ export function DayOfWeekHeatmap() {
   }
 
   const isSeed = heatmap?.source === "seed";
+  const isLive = (heatmap?.live_fares ?? 0) > 0 || heatmap?.source === "live";
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-medium">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
           Day-of-Week Fare Pattern
-          {isSeed && (
-            <span className="ml-2 text-xs font-normal text-muted-foreground">
-              (seed data)
-            </span>
-          )}
+          {isLive ? (
+            <Badge className="gap-1 text-[10px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground animate-pulse" />
+              Live
+            </Badge>
+          ) : isSeed ? (
+            <Badge variant="secondary" className="text-[10px]">
+              seed data
+            </Badge>
+          ) : null}
         </CardTitle>
       </CardHeader>
       <CardContent>

@@ -62,7 +62,10 @@ export default function HeatmapPage() {
         </div>
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
-            Heatmap data unavailable. Is the backend running on port 8000?
+            Heatmap data unavailable. Start the backend:{" "}
+            <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
+              uvicorn skymetric.api.main:app --port 8000
+            </code>
           </CardContent>
         </Card>
       </div>
@@ -73,6 +76,7 @@ export default function HeatmapPage() {
   const minVal = Math.min(...allValues);
   const maxVal = Math.max(...allValues);
   const range = maxVal - minVal || 1;
+  const isLive = (filteredData.live_fares ?? 0) > 0;
 
   function getHeatColor(value: number): string {
     const normalized = (value - minVal) / range;
@@ -92,8 +96,14 @@ export default function HeatmapPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex items-center gap-3">
         <h1 className="text-2xl font-bold tracking-tight">Route Heatmap</h1>
+        {isLive && (
+          <Badge className="gap-1 text-[10px]">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground animate-pulse" />
+            Live
+          </Badge>
+        )}
         <p className="text-sm text-muted-foreground">
           Sector × Date fare matrix · {filteredData.corridors.length} corridors ·{" "}
           {filteredData.dates.length} days

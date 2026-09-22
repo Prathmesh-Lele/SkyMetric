@@ -65,6 +65,12 @@ export function ScraperStatusDashboard() {
           ) : (
             <Badge variant="secondary">Idle</Badge>
           )}
+          {(status?.live_fares ?? 0) > 0 && (
+            <Badge className="gap-1 text-[10px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground animate-pulse" />
+              {status!.live_fares!.toLocaleString("en-IN")} live
+            </Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -84,18 +90,25 @@ export function ScraperStatusDashboard() {
             </div>
           </div>
           <div>
-            <span className="text-muted-foreground">Backoff Triggers</span>
-            <div className="font-mono font-bold text-lg">{status?.backoff_triggers ?? 0}</div>
+            <span className="text-muted-foreground">Live Source</span>
+            <div className="font-mono font-bold text-lg">
+              {status?.live_enabled ? "SerpApi" : "Mock"}
+            </div>
           </div>
         </div>
 
         <div className="text-xs text-muted-foreground">
           Last run: {status?.last_run ? new Date(status.last_run).toLocaleString("en-IN") : "Never"}
+          {status?.last_fetch_source && ` · last fetch: ${status.last_fetch_source}`}
         </div>
 
-        <div className="text-xs text-muted-foreground">
-          Active sources: {status?.active_sources?.join(", ") || "None"}
-        </div>
+        {status?.source_breakdown && (
+          <div className="text-xs text-muted-foreground font-mono">
+            {Object.entries(status.source_breakdown)
+              .map(([k, v]) => `${k}: ${v}`)
+              .join(" · ")}
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">

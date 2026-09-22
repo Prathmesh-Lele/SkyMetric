@@ -115,10 +115,10 @@ export default function AnalyticsPage() {
                           width: `${(value / (key === "volume_adequacy" ? 10 : 15)) * 100}%`,
                           backgroundColor:
                             value / (key === "volume_adequacy" ? 10 : 15) >= 0.7
-                              ? "#10b981"
+                              ? "var(--chart-3)"
                               : value / (key === "volume_adequacy" ? 10 : 15) >= 0.4
-                              ? "#f59e0b"
-                              : "#ef4444",
+                              ? "var(--chart-4)"
+                              : "var(--destructive)",
                         }}
                       />
                     </div>

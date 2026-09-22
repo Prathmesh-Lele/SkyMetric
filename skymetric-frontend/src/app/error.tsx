@@ -35,6 +35,9 @@ export default function ErrorPage({
         <p className="mt-1 text-sm text-muted-foreground">
           {error.message || "An unexpected error occurred."}
         </p>
+        <p className="mt-2 text-xs text-muted-foreground font-mono">
+          Backend: uvicorn skymetric.api.main:app --port 8000
+        </p>
       </div>
       <button
         onClick={reset}

@@ -6,6 +6,9 @@ export interface DailyIndexResponse {
   sector_indices: Record<string, number>;
   window_indices: Record<string, number>;
   base_date: string;
+  source_breakdown?: Record<string, number>;
+  live_fares?: number;
+  source?: string;
 }
 
 export interface SectorIndicesResponse {
@@ -19,6 +22,8 @@ export interface HeatmapResponse {
   matrix: number[][];
   unit: string;
   source?: string;
+  source_breakdown?: Record<string, number>;
+  live_fares?: number;
 }
 
 export interface Carrier {
@@ -42,6 +47,8 @@ export interface ElasticityResponse {
 export interface HealthResponse {
   status: string;
   service: string;
+  live_data?: boolean;
+  source?: string;
 }
 
 export interface ScraperStatus {
@@ -56,6 +63,12 @@ export interface ScraperStatus {
   backoff_triggers: number;
   supported_sources: string[];
   active_sources: string[];
+  source_breakdown?: Record<string, number>;
+  live_enabled?: boolean;
+  live_source?: string | null;
+  last_fetch_source?: string | null;
+  total_fares?: number;
+  live_fares?: number;
 }
 
 export interface ScraperRunResponse {
@@ -64,7 +77,18 @@ export interface ScraperRunResponse {
   origin?: string;
   destination?: string;
   date?: string;
+  source?: string;
+  live?: boolean;
+  fares_inserted?: number;
+  sample_fares?: { carrier?: string; flight_number?: string; total_fare?: number }[];
   status?: ScraperStatus;
+}
+
+export interface LiveRefreshResponse {
+  message: string;
+  fetched: Record<string, unknown>;
+  source_breakdown: Record<string, number>;
+  live_fares: number;
 }
 
 export interface BacktestResponse {
@@ -198,6 +222,21 @@ export const api = {
       method: "POST",
       headers: { "X-API-Key": "skymetric-demo-key" },
     }),
+  liveRefresh: (force = false) =>
+    fetchApi<LiveRefreshResponse>(
+      `/api/v1/scraper/live-refresh${force ? "?force=true" : ""}`,
+      {
+        method: "POST",
+        headers: { "X-API-Key": "skymetric-demo-key" },
+      }
+    ),
+  scraperSources: () =>
+    fetchApi<{
+      breakdown: Record<string, number>;
+      total: number;
+      live: number;
+      live_enabled: boolean;
+    }>("/api/v1/scraper/sources"),
   backtest: () => fetchApi<BacktestResponse>("/api/v1/backtest/compare"),
   cpiAll: () => fetchApi<{ cpi_general: CpiDataPoint[]; cpi_transport: CpiDataPoint[]; cpi_air_transport: CpiDataPoint[]; source: string; base_year: number; note: string }>("/api/v1/cpi"),
   cpiAirTransport: () => fetchApi<CpiResponse>("/api/v1/cpi/air-transport"),

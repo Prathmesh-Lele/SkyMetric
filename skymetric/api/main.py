@@ -1,5 +1,6 @@
 """FastAPI application entry point with endpoint registration."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -11,7 +12,7 @@ from skymetric.config.settings import settings
 from skymetric.api.routes.index import router as index_router
 from skymetric.api.routes.heatmap import router as heatmap_router
 from skymetric.api.routes.elasticity import router as elasticity_router
-from skymetric.api.routes.scraper import router as scraper_router
+from skymetric.api.routes.scraper import router as scraper_router, scrape_trunk_live
 from skymetric.api.routes.backtest import router as backtest_router
 from skymetric.api.routes.cpi import router as cpi_router
 from skymetric.api.routes.analytics import router as analytics_router
@@ -27,8 +28,24 @@ logger = logging.getLogger(__name__)
 scheduler = BackgroundScheduler()
 
 
+def _run_async(coro):
+    """Run an async coroutine from a sync APScheduler job."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Called from a thread with a loop — use a fresh loop
+            new_loop = asyncio.new_event_loop()
+            try:
+                return new_loop.run_until_complete(coro)
+            finally:
+                new_loop.close()
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
+
+
 def _scheduled_scrape_job():
-    """Daily scrape job triggered by APScheduler."""
+    """Daily live scrape (06:00): SerpApi trunk corridors + mock backfill."""
     from datetime import datetime
     from skymetric.data.seed_data import generate_fares_for_day
     from skymetric.models.database import SessionLocal, init_db
@@ -37,6 +54,15 @@ def _scheduled_scrape_job():
     sched_logger = logging.getLogger("skymetric.scheduler")
     sched_logger.info("Running scheduled scrape job at %s", datetime.utcnow().isoformat())
     init_db()
+
+    # 1) Live SerpApi fetch for trunk corridors (3 calls)
+    try:
+        result = _run_async(scrape_trunk_live())
+        sched_logger.info("Live trunk scrape: %s", result)
+    except Exception as exc:
+        sched_logger.error("Live trunk scrape failed: %s", exc)
+
+    # 2) Synthetic backfill for full 10-corridor × 5-window coverage
     db = SessionLocal()
     try:
         records = generate_fares_for_day(datetime.utcnow(), include_outliers=False)
@@ -59,9 +85,9 @@ def _scheduled_scrape_job():
             )
             db.add(fare)
         db.commit()
-        sched_logger.info("Scheduled job inserted %d fare records", len(records))
+        sched_logger.info("Backfill inserted %d synthetic fare records", len(records))
     except Exception as exc:
-        sched_logger.error("Scheduled scrape job failed: %s", exc)
+        sched_logger.error("Scheduled backfill failed: %s", exc)
         db.rollback()
     finally:
         db.close()
@@ -71,7 +97,24 @@ def _scheduled_scrape_job():
 async def lifespan(app: FastAPI):
     scheduler.add_job(_scheduled_scrape_job, "cron", hour=6, minute=0, id="daily_scrape")
     scheduler.start()
-    logger.info("SkyMetric API started — scheduler running, log level=%s", settings.LOG_LEVEL)
+
+    live = bool(settings.SERPAPI_KEY)
+    logger.info(
+        "SkyMetric API started — scheduler running, live=%s (SERPAPI_KEY %s), log level=%s",
+        live,
+        "set" if live else "missing",
+        settings.LOG_LEVEL,
+    )
+
+    # Boot-time live refresh: only if no recent serpapi rows (quota guard).
+    # force=False → skips when live data already exists within LIVE_MIN_INTERVAL_HOURS.
+    if live:
+        try:
+            result = await scrape_trunk_live(force=False)
+            logger.info(f"Boot live refresh: {result}")
+        except Exception as exc:
+            logger.warning(f"Boot live refresh failed: {exc}")
+
     yield
     scheduler.shutdown()
 
@@ -121,4 +164,12 @@ app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Analytic
 
 @app.get("/api/v1/health", tags=["Health"])
 def health_check():
-    return {"status": "healthy", "service": "skymetric", "scheduler_running": scheduler.running}
+    from skymetric.scraper.flight_api_client import flight_api_client
+
+    return {
+        "status": "healthy",
+        "service": "skymetric",
+        "scheduler_running": scheduler.running,
+        "live_data": flight_api_client.live_enabled,
+        "source": "serpapi" if flight_api_client.live_enabled else "mock",
+    }

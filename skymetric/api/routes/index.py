@@ -138,12 +138,19 @@ def get_daily_index(
 
     result = compute_daily_index(current_clean, base_clean)
 
+    from collections import Counter
+    src_counts = Counter(r.get("source_platform", "unknown") for r in current)
+    live = src_counts.get("serpapi", 0)
+
     return {
         "date": target_date.isoformat(),
         "headline_index": result["headline"],
         "sector_indices": result["sectors"],
         "window_indices": {str(k): v for k, v in result["windows"].items()},
         "base_date": base_date.isoformat(),
+        "source_breakdown": dict(src_counts),
+        "live_fares": live,
+        "source": "live" if live > 0 else "database",
     }
 
 

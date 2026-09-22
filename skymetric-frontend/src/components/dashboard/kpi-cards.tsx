@@ -2,13 +2,14 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Activity, Plane } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, Plane, Radio } from "lucide-react";
 
 interface KpiCardsProps {
   headlineIndex?: number;
   previousIndex?: number;
   totalCorridors: number;
   isHealthy: boolean;
+  liveFares?: number;
 }
 
 export function KpiCards({
@@ -16,6 +17,7 @@ export function KpiCards({
   previousIndex = 100,
   totalCorridors,
   isHealthy,
+  liveFares = 0,
 }: KpiCardsProps) {
   const hasIndex = headlineIndex !== undefined;
   const delta = hasIndex ? headlineIndex - previousIndex : 0;
@@ -35,9 +37,17 @@ export function KpiCards({
           <div className="text-3xl font-bold">
             {hasIndex ? headlineIndex.toFixed(2) : "—"}
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            T+15 Anchor · Base = 100
-          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-xs text-muted-foreground">
+              T+15 Anchor · Base = 100
+            </p>
+            {liveFares > 0 && (
+              <Badge className="gap-1 text-[9px] px-1.5 py-0">
+                <Radio className="h-2.5 w-2.5 animate-pulse" />
+                {liveFares.toLocaleString("en-IN")} live
+              </Badge>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -101,7 +111,9 @@ export function KpiCards({
             {isHealthy ? "Operational" : "Degraded"}
           </Badge>
           <p className="text-xs text-muted-foreground mt-2">
-            DGCA Weighted Basket
+            {liveFares > 0
+              ? `${liveFares.toLocaleString("en-IN")} live SerpApi fares`
+              : "DGCA Weighted Basket"}
           </p>
         </CardContent>
       </Card>
