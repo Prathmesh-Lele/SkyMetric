@@ -11,14 +11,21 @@ import { ScraperStatusDashboard } from "@/components/dashboard/scraper-status";
 import { BacktestChart } from "@/components/dashboard/backtest-chart";
 import { DatePicker } from "@/components/dashboard/date-picker";
 import { ExportButton } from "@/components/dashboard/export-button";
-import { useDailyIndex, useHealth, useBacktest, useHeatmap } from "@/lib/hooks";
+import { useDailyIndex, useHealth, useBacktest, useHeatmap, useMounted } from "@/lib/hooks";
 
 export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
-  const { data: dailyIndex, isLoading: indexLoading, isError: indexError } = useDailyIndex(selectedDate);
-  const { data: health } = useHealth();
-  const { data: backtest } = useBacktest();
-  const { data: heatmap } = useHeatmap(30, selectedDate);
+  const mounted = useMounted();
+  const { data: rawDaily, isLoading: indexLoading, isError: indexError } = useDailyIndex(selectedDate);
+  const { data: rawHealth } = useHealth();
+  const { data: rawBacktest } = useBacktest();
+  const { data: rawHeatmap } = useHeatmap(30, selectedDate);
+
+  // SSR has no query data; null client data until mount so first paint matches
+  const dailyIndex = mounted ? rawDaily : undefined;
+  const health = mounted ? rawHealth : undefined;
+  const backtest = mounted ? rawBacktest : undefined;
+  const heatmap = mounted ? rawHeatmap : undefined;
 
   const headlineIndex = dailyIndex?.headline_index;
   const previousIndex = dailyIndex ? 100 : undefined; // vs base period (T-30 anchor = 100)
@@ -39,7 +46,7 @@ export default function DashboardPage() {
         index: headlineIndex,
       },
     ];
-  }, [backtest, headlineIndex]);
+  }, [backtest, headlineIndex, mounted]);
 
   const exportData = useMemo(() => {
     if (!heatmap) return [];
@@ -81,8 +88,13 @@ export default function DashboardPage() {
         headlineIndex={headlineIndex}
         previousIndex={previousIndex}
         totalCorridors={10}
-        isHealthy={health?.status === "healthy"}
+        isHealthy={
+          health === undefined ? undefined : health.status === "healthy"
+        }
         liveFares={dailyIndex?.live_fares ?? heatmap?.live_fares ?? 0}
+        lastDataUpdate={health?.last_data_update ?? null}
+        nextScheduledScrape={health?.next_scheduled_scrape ?? null}
+        refreshIntervalSeconds={health?.refresh_interval_seconds ?? 60}
       />
 
       <IndexChart data={chartData} isLoading={indexLoading} />

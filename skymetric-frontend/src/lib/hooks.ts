@@ -1,5 +1,13 @@
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
+
+/** True only after client mount — keeps SSR HTML identical to first client render. */
+export function useMounted() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted;
+}
 
 export function useDailyIndex(date?: string) {
   return useQuery({

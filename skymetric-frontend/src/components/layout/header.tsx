@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Sidebar } from "./sidebar";
-import { useHealth, useScraperStatus } from "@/lib/hooks";
+import { useHealth, useMounted, useScraperStatus } from "@/lib/hooks";
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "National Index",
@@ -23,14 +23,19 @@ const PAGE_TITLES: Record<string, string> = {
 
 export function Header() {
   const pathname = usePathname();
+  const mounted = useMounted();
   const { data: health } = useHealth();
   const { data: scraper } = useScraperStatus();
 
   const pageTitle = PAGE_TITLES[pathname] ?? "SkyMetric";
-  const isLive = health?.live_data === true || (scraper?.live_fares ?? 0) > 0;
+  // Gate API-derived markup on mounted so SSR HTML matches first client paint
+  const isLive =
+    mounted &&
+    (health?.live_data === true || (scraper?.live_fares ?? 0) > 0);
   const liveFares = scraper?.live_fares ?? 0;
-  const isHealthy = health?.status === "healthy";
-  const isRunning = scraper?.is_running === true;
+  const isHealthy = mounted && health?.status === "healthy";
+  const healthKnown = mounted && health !== undefined;
+  const isRunning = mounted && scraper?.is_running === true;
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
@@ -80,8 +85,20 @@ export function Header() {
           {isLive ? `Live · ${liveFares.toLocaleString("en-IN")}` : "Simulated"}
         </Badge>
         <span
-          className={`h-2 w-2 rounded-full ${isHealthy ? "bg-emerald-500" : "bg-destructive"}`}
-          title={isHealthy ? "Backend healthy" : "Backend down"}
+          className={`h-2 w-2 rounded-full ${
+            !healthKnown
+              ? "bg-muted-foreground/40"
+              : isHealthy
+                ? "bg-emerald-500"
+                : "bg-destructive"
+          }`}
+          title={
+            !healthKnown
+              ? "Checking backend…"
+              : isHealthy
+                ? "Backend healthy"
+                : "Backend down"
+          }
         />
         <span className="hidden sm:inline text-xs text-muted-foreground font-mono">
           India Airfare Price Observatory

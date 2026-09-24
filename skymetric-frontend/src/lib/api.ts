@@ -49,6 +49,10 @@ export interface HealthResponse {
   service: string;
   live_data?: boolean;
   source?: string;
+  scheduler_running?: boolean;
+  last_data_update?: string | null;
+  next_scheduled_scrape?: string | null;
+  refresh_interval_seconds?: number;
 }
 
 export interface ScraperStatus {
@@ -69,6 +73,8 @@ export interface ScraperStatus {
   last_fetch_source?: string | null;
   total_fares?: number;
   live_fares?: number;
+  last_data_update?: string | null;
+  next_scheduled_scrape?: string | null;
 }
 
 export interface ScraperRunResponse {

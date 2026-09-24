@@ -127,6 +127,35 @@ def _source_breakdown() -> dict:
         db.close()
 
 
+def _next_scheduled_scrape() -> Optional[str]:
+    """ISO timestamp of the next 06:00 daily scrape, or None if scheduler is down."""
+    try:
+        from skymetric.api.main import scheduler
+
+        if not scheduler.running:
+            return None
+        job = scheduler.get_job("daily_scrape")
+        if job is None or job.next_run_time is None:
+            return None
+        return job.next_run_time.isoformat()
+    except Exception:
+        return None
+
+
+def _last_data_update() -> Optional[str]:
+    """ISO timestamp of the newest fare row (when National SkyMetric last changed)."""
+    from skymetric.models.database import SessionLocal, init_db
+    from skymetric.models.fare import Fare
+
+    init_db()
+    db = SessionLocal()
+    try:
+        ts = db.query(func.max(Fare.timestamp)).scalar()
+        return ts.isoformat() if ts else None
+    finally:
+        db.close()
+
+
 @router.get("/status")
 def get_scraper_status():
     """Get current scraper status, metrics, and live-data source breakdown."""
@@ -138,6 +167,8 @@ def get_scraper_status():
     status["last_fetch_source"] = flight_api_client.get_last_source()
     status["total_fares"] = sum(breakdown.values())
     status["live_fares"] = breakdown.get("serpapi", 0)
+    status["last_data_update"] = _last_data_update()
+    status["next_scheduled_scrape"] = _next_scheduled_scrape()
     return status
 
 

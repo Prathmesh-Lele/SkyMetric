@@ -5,18 +5,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useScraperStatus } from "@/lib/hooks";
+import { useMounted, useScraperStatus } from "@/lib/hooks";
 import { api } from "@/lib/api";
 
 const CITIES = ["DEL", "BOM", "BLR", "CCU", "HYD", "MAA", "IXS", "DHM"];
 const API_KEY = "skymetric-demo-key";
 
 export function ScraperStatusDashboard() {
-  const { data: status, refetch, isError } = useScraperStatus();
+  const mounted = useMounted();
+  const { data: rawStatus, refetch, isError } = useScraperStatus();
+  // Null API data until mount so SSR HTML matches first client paint
+  const status = mounted ? rawStatus : undefined;
   const [origin, setOrigin] = useState("DEL");
   const [destination, setDestination] = useState("BOM");
   const [isRunning, setIsRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const showLive = (status?.live_fares ?? 0) > 0;
+  const lastRun = status?.last_run
+    ? new Date(status.last_run).toLocaleString("en-IN")
+    : null;
 
   const handleRunScraper = async () => {
     setIsRunning(true);
@@ -40,7 +47,7 @@ export function ScraperStatusDashboard() {
     }
   };
 
-  if (isError) {
+  if (mounted && isError) {
     return (
       <Card>
         <CardHeader>
@@ -65,10 +72,10 @@ export function ScraperStatusDashboard() {
           ) : (
             <Badge variant="secondary">Idle</Badge>
           )}
-          {(status?.live_fares ?? 0) > 0 && (
+          {showLive && (
             <Badge className="gap-1 text-[10px]">
               <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground animate-pulse" />
-              {status!.live_fares!.toLocaleString("en-IN")} live
+              {(status?.live_fares ?? 0).toLocaleString("en-IN")} live
             </Badge>
           )}
         </CardTitle>
@@ -98,9 +105,15 @@ export function ScraperStatusDashboard() {
         </div>
 
         <div className="text-xs text-muted-foreground">
-          Last run: {status?.last_run ? new Date(status.last_run).toLocaleString("en-IN") : "Never"}
+          Last run: {lastRun ?? "Never"}
           {status?.last_fetch_source && ` · last fetch: ${status.last_fetch_source}`}
         </div>
+
+        {status?.next_scheduled_scrape && (
+          <div className="text-xs text-muted-foreground">
+            Next auto scrape: {new Date(status.next_scheduled_scrape).toLocaleString("en-IN")}
+          </div>
+        )}
 
         {status?.source_breakdown && (
           <div className="text-xs text-muted-foreground font-mono">

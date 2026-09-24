@@ -11,9 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Radio, Zap } from "lucide-react";
+import { Radio, Zap, ZapOff } from "lucide-react";
 import { ScraperStatusDashboard } from "@/components/dashboard/scraper-status";
-import { useLiveRefresh, useScraperStatus } from "@/lib/hooks";
+import { useLiveRefresh, useMounted, useScraperStatus } from "@/lib/hooks";
 
 const ALL_CITIES = ["DEL", "BOM", "BLR", "CCU", "HYD", "MAA", "IXS", "DHM"];
 
@@ -25,8 +25,10 @@ export default function ScraperPage() {
   const [runMsg, setRunMsg] = useState<string | null>(null);
   const [runErr, setRunErr] = useState<string | null>(null);
 
+  const mounted = useMounted();
   const liveRefresh = useLiveRefresh();
-  const { data: status } = useScraperStatus();
+  const { data: rawStatus } = useScraperStatus();
+  const status = mounted ? rawStatus : undefined;
 
   const breakdown = status?.source_breakdown ?? {};
   const liveFares = status?.live_fares ?? 0;
@@ -50,16 +52,18 @@ export default function ScraperPage() {
     }
   };
 
-  const handleLiveRefresh = async () => {
+  const handleLiveRefresh = async (force: boolean) => {
     setRefreshMsg(null);
     setRefreshErr(null);
     try {
-      const res = await liveRefresh.mutateAsync();
+      const res = await liveRefresh.mutateAsync(force);
       setRefreshMsg(
         `${res.message} · live fares now ${res.live_fares.toLocaleString("en-IN")}`
       );
     } catch {
-      setRefreshErr("Live refresh failed — check SERPAPI_KEY / backend.");
+      setRefreshErr(
+        "Live refresh failed — recent data or cooldown (try Force after 10 min)."
+      );
     }
   };
 
@@ -120,17 +124,26 @@ export default function ScraperPage() {
 
           <div className="flex flex-wrap gap-3">
             <Button
-              onClick={handleLiveRefresh}
+              onClick={() => handleLiveRefresh(false)}
               disabled={liveRefresh.isPending || status?.is_running || !liveEnabled}
               className="gap-2"
             >
               <Zap className="h-4 w-4" />
               {liveRefresh.isPending
-                ? "Fetching live fares…"
-                : "Live Refresh (3 corridors)"}
+                ? "Fetching…"
+                : "Run SerpApi (safe)"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleLiveRefresh(true)}
+              disabled={liveRefresh.isPending || status?.is_running || !liveEnabled}
+              className="gap-2"
+            >
+              <ZapOff className="h-4 w-4" />
+              Force refresh
             </Button>
             <span className="text-xs text-muted-foreground self-center">
-              DEL-BOM · DEL-BLR · BOM-BLR at T+15 · skips if live data is under 12h old (quota-safe)
+              Safe skips if live data &lt;12h old · Force spends ~3 quota (10 min cooldown)
             </span>
           </div>
 

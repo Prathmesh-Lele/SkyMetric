@@ -166,10 +166,38 @@ app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Analytic
 def health_check():
     from skymetric.scraper.flight_api_client import flight_api_client
 
+    next_scrape = None
+    try:
+        if scheduler.running:
+            job = scheduler.get_job("daily_scrape")
+            if job is not None and job.next_run_time is not None:
+                next_scrape = job.next_run_time.isoformat()
+    except Exception:
+        next_scrape = None
+
+    last_update = None
+    try:
+        from sqlalchemy import func
+        from skymetric.models.database import SessionLocal, init_db
+        from skymetric.models.fare import Fare
+
+        init_db()
+        db = SessionLocal()
+        try:
+            ts = db.query(func.max(Fare.timestamp)).scalar()
+            last_update = ts.isoformat() if ts else None
+        finally:
+            db.close()
+    except Exception:
+        last_update = None
+
     return {
         "status": "healthy",
         "service": "skymetric",
         "scheduler_running": scheduler.running,
         "live_data": flight_api_client.live_enabled,
         "source": "serpapi" if flight_api_client.live_enabled else "mock",
+        "last_data_update": last_update,
+        "next_scheduled_scrape": next_scrape,
+        "refresh_interval_seconds": 60,
     }
